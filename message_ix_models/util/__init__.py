@@ -449,7 +449,7 @@ def make_matched_dfs(
         Used to populate other columns of each data frame. Duplicates—which occur when
         the target parameter has fewer dimensions than `base`—are dropped.
     par_values :
-        Argument names (e.g. ‘fix_cost’) are passed to :func:`.make_df`. If the value is
+        Argument names (e.g. 'fix_cost') are passed to :func:`.make_df`. If the value is
         :class:`float`, it overwrites the "value" column; if :class:`pint.Quantity`, its
         magnitude overwrites "value" and its units the "units" column, as a formatted
         string.
@@ -494,7 +494,7 @@ def make_matched_dfs(
 def make_source_tech(
     info: Union[message_ix.Scenario, ScenarioInfo], common, **values
 ) -> "MutableParameterData":
-    """Return parameter data for a ‘source’ technology.
+    """Return parameter data for a 'source' technology.
 
     The technology has no inputs; its output commodity and/or level are determined by
     `common`; either single values, or :obj:`None` if the result will be
@@ -646,7 +646,7 @@ def path_fallback(
 ) -> Path:
     """Locate a path constructed from `parts` found in the first of several directories.
 
-    This allows to implement ‘fallback’ behaviour in which files or directories in
+    This allows to implement 'fallback' behaviour in which files or directories in
     certain locations are used preferentially.
 
     Parameters
@@ -678,8 +678,10 @@ def path_fallback(
 
     Raises
     ------
+    FileNotFoundError
+        If `parts` are not found in any of the indicated locations.
     ValueError
-        If `where` is empty or `parts` are not found in any of the indicated locations.
+        If `where` is empty.
     """
     dirs = []
     for item in where.split() if isinstance(where, str) else where:
@@ -706,7 +708,8 @@ def path_fallback(
     if not dirs:
         raise ValueError(f"No directories identified among {where!r}")
     else:
-        raise ValueError(f"'{Path(*parts)!s}' not found in any of {dirs}")
+        # Raise FileNotFoundError instead of ValueError when the file isn't found
+        raise FileNotFoundError(f"'{Path(*parts)!s}' not found in any of {dirs}")
 
 
 def replace_par_data(

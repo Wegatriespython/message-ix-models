@@ -218,17 +218,61 @@ def prepare_computer(
 
     # Look up input data flow
     source_obj = None
+    log.debug(f"Starting source lookup for source={source!r} with kw={source_kw!r}")
+    checked_sources = []  # Keep track of sources checked
+
     for cls in SOURCES.values():
+        source_id = f"{cls.__name__} (id={cls.id!r})"
+        checked_sources.append(source_id)
+        log.debug(f"Attempting source: {source_id}")
         try:
             # Instantiate a Source object to provide this data
             source_obj = cls(source, deepcopy(source_kw or dict()))
-        # except Exception as e:  # For debugging
-        #     log.debug(repr(e))
-        except Exception:
-            pass  # Class does not recognize the arguments
+            log.info(f"Source {source_id} successfully initialized. Using this source.")
+            # If __init__ succeeds without raising an exception, we've found
+            # the correct source. Stop searching.
+            break
+        except ValueError as e_val:
+            # This source class explicitly raised ValueError, meaning it doesn't
+            # handle the given source/source_kw based on its internal logic.
+            log.debug(f"Source {source_id} incompatible: {e_val!r}. Skipping.")
+            # Continue to the next source class in the loop.
+            pass
+        except FileNotFoundError as e_fnf:
+            # Specific handling for missing files - likely a configuration issue
+            log.error(
+                f"Source {source_id} failed: Required data file not found: {e_fnf!s}"
+            )
+            log.error(
+                f"Please ensure the data file exists in one of the expected locations."
+            )
+            # Re-raise this specific error as it indicates a setup problem
+            raise
+        except Exception as e_other:
+            # Catch any other unexpected exceptions during initialization
+            log.error(
+                f"Source {source_id} failed during initialization with an unexpected error:",
+                exc_info=True,
+            )
+            log.error(
+                f"This might indicate a bug in the source class implementation or an unexpected data issue."
+            )
+            # Re-raise the unexpected exception
+            raise
 
+    # After the loop completes
     if source_obj is None:
-        raise ValueError(f"No source found that can handle {source!r}")
+        log.error(
+            f"Lookup failed: No registered source could handle source={source!r} with kw={source_kw!r}"
+        )
+        log.error(f"Sources checked: {', '.join(checked_sources)}")
+        # This will now only be reached if *all* sources were tried and *all* of them
+        # explicitly raised ValueError (indicating incompatibility).
+        raise ValueError(f"No compatible source registered for {source!r}")
+    else:
+        log.debug(
+            f"Source lookup finished. Using handler: {source_obj.__class__.__name__}"
+        )
 
     # Add structural information to the Computer
     c.require_compat("message_ix_models.report.operator")
