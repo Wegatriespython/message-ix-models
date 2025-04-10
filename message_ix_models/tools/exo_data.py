@@ -243,21 +243,13 @@ def prepare_computer(
             log.error(
                 f"Source {source_id} failed: Required data file not found: {e_fnf!s}"
             )
-            log.error(
-                f"Please ensure the data file exists in one of the expected locations."
-            )
-            # Re-raise this specific error as it indicates a setup problem
             raise
         except Exception as e_other:
             # Catch any other unexpected exceptions during initialization
             log.error(
-                f"Source {source_id} failed during initialization with an unexpected error:",
+                f"Source {source_id} failed during initialization with an unexpected error: {e_other!r}",
                 exc_info=True,
             )
-            log.error(
-                f"This might indicate a bug in the source class implementation or an unexpected data issue."
-            )
-            # Re-raise the unexpected exception
             raise
 
     # After the loop completes
