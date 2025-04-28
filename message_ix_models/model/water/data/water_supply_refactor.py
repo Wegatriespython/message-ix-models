@@ -129,17 +129,21 @@ def map_basin_region_wat(context: "Context") -> pd.DataFrame:
 
 
 # Helper for processing cooling supply rules
-def _process_cooling_supply(context: "Context") -> dict[str, pd.DataFrame]:
+def _process_cooling_supply(context: "Context", year_wat: tuple, node_region: Any) -> dict[str, pd.DataFrame]:
     """Processes rules specific to the 'cooling' nexus setting."""
     results: dict[str, pd.DataFrame] = {}
     cooling_outputs = []
-    base_cooling = {}  # no dfs used in cooling rules
+    dummy_df = pd.DataFrame()
+    base_cooling = {"rule_dfs":
+    {"df_node": dummy_df,
+    "runtime_vals": {"year_wat": year_wat}
+    },
+    "node_loc": node_region}  # no dfs used in cooling rules
     for r in COOLING_SUPPLY_RULES.get_rule():
         df_rule = run_standard(r, base_cooling)
         cooling_outputs.append(df_rule)
     results["output"] = safe_concat(cooling_outputs)
     return results
-
 
 # Helper for processing slack technology rules
 def _process_slack_rules(
@@ -456,7 +460,7 @@ def add_water_supply(context: "Context") -> dict[str, pd.DataFrame]:
 
     # Select processing branch based on nexus_set
     if context.nexus_set == "cooling":
-        results = _process_cooling_supply(context)
+        results = _process_cooling_supply(context, year_wat, node_region)
     elif context.nexus_set == "nexus":
         results = _process_nexus_supply(
             context,
