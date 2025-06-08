@@ -30,8 +30,8 @@ DISTRIBUTION_TECHNOLOGIES = [
 ]
 
 # Unit conversions using iam_units registry
-# Convert USD/km³ to USD/MCM: 1 km³ = 1000 MCM, so divide by 1000
-USD_KM3_TO_USD_MCM = 1 / 1000  # USD/km³ to USD/MCM (simple division)
+# Convert USD/(m³/day) to USD/MCM: m³/day * 365 days/year / 1e6 m³/MCM
+USD_M3DAY_TO_USD_MCM = (registry("m^3/day").to("m^3/year").magnitude) / 1e6
 ANNUAL_CAPACITY_FACTOR = 5  # Convert 5-year capacity to annual
 # Convert km³ to MCM: 1 km³ = 1e9 m³, 1 MCM = 1e6 m³, so factor = 1000
 KM3_TO_MCM = registry("1 km^3").to("meter^3").magnitude / 1e6  # km³ to MCM conversion
@@ -303,7 +303,7 @@ def _process_investment_costs(
                 inv_cost = make_df(
                     "inv_cost",
                     technology=row["tec"],
-                    value=row["investment_mid"] * USD_KM3_TO_USD_MCM,
+                    value=row["investment_mid"] * USD_M3DAY_TO_USD_MCM,
                     unit="USD/MCM",
                 ).pipe(broadcast, year_vtg=year_wat, node_loc=relevant_basins["node"])
                 inv_dfs.append(inv_cost)
@@ -339,7 +339,7 @@ def _process_fixed_costs(
             fix_cost = make_df(
                 "fix_cost",
                 technology=row["tec"],
-                value=row["fix_cost_mid"] * USD_KM3_TO_USD_MCM,
+                value=row["fix_cost_mid"] * USD_M3DAY_TO_USD_MCM,
                 unit="USD/MCM",
             ).pipe(broadcast, labels=yv_ya, node_loc=relevant_basins["node"])
             fix_dfs.append(fix_cost)
@@ -382,7 +382,7 @@ def _process_variable_costs(
             var_cost = make_df(
                 "var_cost",
                 technology=row["tec"],
-                value=row[value_col] * USD_KM3_TO_USD_MCM,
+                value=row[value_col] * USD_M3DAY_TO_USD_MCM,
                 unit="USD/MCM",
                 mode=mode,
             ).pipe(
@@ -417,9 +417,9 @@ def _process_setup_and_data_loading(
     df_node = _load_basin_data(context)
 
     # Load infrastructure data
-    df = _load_infrastructure_data()
+    water_distribution = _load_infrastructure_data()
 
-    return df_node, df, sub_time, year_wat
+    return df_node, water_distribution, sub_time, year_wat
 
 
 def _process_capacity_factor_parameters(
@@ -589,6 +589,10 @@ def filter_basins_for_technology(
     # - Regional technology availability
 
     # For now, return all basins but log warning
+    # Handle case where technology might be NaN or not a string
+    if pd.isna(technology) or not isinstance(technology, str):
+        return pd.DataFrame()  # Return empty DataFrame for invalid technologies
+
     if "desal" in technology.lower():
         # FIXME: Filter to only coastal basins once basin classification data available
         pass
@@ -984,7 +988,7 @@ def _process_desalination_technology_parameters(
         inv_cost = make_df(
             "inv_cost",
             technology=row["tec"],
-            value=row["inv_cost_mid"] * USD_KM3_TO_USD_MCM,
+            value=row["inv_cost_mid"] * USD_M3DAY_TO_USD_MCM,
             unit="USD/MCM",
         ).pipe(broadcast, year_vtg=year_wat, node_loc=tech_basins["node"])
         inv_dfs.append(inv_cost)
@@ -993,7 +997,7 @@ def _process_desalination_technology_parameters(
         fix_cost = make_df(
             "fix_cost",
             technology=row["tec"],
-            value=row["fix_cost_mid"] / 1e3,
+            value=row["fix_cost_mid"] * USD_M3DAY_TO_USD_MCM,
             unit="USD/MCM",
         ).pipe(broadcast, labels=yv_ya, node_loc=tech_basins["node"])
         fix_dfs.append(fix_cost)
@@ -1002,7 +1006,7 @@ def _process_desalination_technology_parameters(
         var_cost = make_df(
             "var_cost",
             technology=row["tec"],
-            value=row["var_cost_mid"] * USD_KM3_TO_USD_MCM,
+            value=row["var_cost_mid"] * USD_M3DAY_TO_USD_MCM,
             unit="USD/MCM",
             mode="M1",
         ).pipe(broadcast, labels=yv_ya, node_loc=tech_basins["node"], time=sub_time)
