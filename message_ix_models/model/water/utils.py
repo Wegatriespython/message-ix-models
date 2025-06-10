@@ -127,41 +127,60 @@ def add_commodity_and_level(df: pd.DataFrame, default_level=None):
 def map_yv_ya_lt(
     periods: tuple[int, ...], lt: int, ya: Optional[int] = None
 ) -> pd.DataFrame:
-    """All meaningful combinations of (vintage year, active year) given `periods`.
+    """Generate proper vintage-activity year combinations for MESSAGEix.
+
+    This function creates vintage-activity year combinations that follow MESSAGEix
+    conventions and avoid problematic historical vintages being active in model periods.
 
     Parameters
     ----------
     periods : tuple[int, ...]
-        A sequence of years.
+        A sequence of years including both historical and model years.
     lt : int, lifetime
-    ya : int, active year
-        The first active year.
+        Technology lifetime in years.
+    ya : int, optional
+        The first model year (firstmodelyear). If not provided, uses first period.
+
     Returns
     -------
     pd.DataFrame
-        A DataFrame with columns 'year_vtg' and 'year_act'.
+        A DataFrame with columns 'year_vtg' and 'year_act' containing only
+        valid combinations that respect MESSAGEix conventions.
     """
     if not ya:
         ya = periods[0]
-        log.info(f"First active year set as {ya!r}")
+        log.info(f"First model year set as {ya!r}")
     if not lt:
         raise ValueError("Add a fixed lifetime parameter 'lt'")
 
-    # The following lines are the same as
-    # message_ix.tests.test_feature_vintage_and_active_years._generate_yv_ya
+    # Separate historical and model years
+    model_years = [y for y in periods if y >= ya]
+    historical_years = [y for y in periods if y < ya]
 
-    # - Create a mesh grid using numpy built-ins
-    # - Take the upper-triangular portion (setting the rest to 0)
-    # - Reshape
-    data = np.triu(np.meshgrid(periods, periods, indexing="ij")).reshape((2, -1))
-    # Filter only non-zero pairs
-    df = pd.DataFrame(
-        filter(sum, zip(data[0, :], data[1, :])),
-        columns=["year_vtg", "year_act"],
-        dtype=np.int64,
-    )
+    combinations = []
 
-    # Select values using the `ya` and `lt` parameters
-    return df.loc[(ya <= df.year_act) & (df.year_act - df.year_vtg <= lt)].reset_index(
-        drop=True
-    )
+    # Rule 1: Model year vintages can be active in current and future model years
+    for vtg_year in model_years:
+        for act_year in model_years:
+            if act_year >= vtg_year and act_year - vtg_year <= lt:
+                combinations.append({"year_vtg": vtg_year, "year_act": act_year})
+
+    # Rule 2:
+    # Allow historical vintages in model years only if they're still within lifetime
+    # This preserves existing capacity from before the model horizon
+    if historical_years and model_years:
+        for vtg_year in historical_years:
+            for act_year in model_years:
+                if act_year >= vtg_year and act_year - vtg_year <= lt:
+                    combinations.append({"year_vtg": vtg_year, "year_act": act_year})
+
+    df = pd.DataFrame(combinations, dtype=np.int64)
+
+    # Ensure we have the right columns even if empty
+    if df.empty:
+        df = pd.DataFrame(columns=["year_vtg", "year_act"], dtype=np.int64)
+
+    # Sort for consistency
+    df = df.sort_values(["year_vtg", "year_act"]).reset_index(drop=True)
+
+    return df

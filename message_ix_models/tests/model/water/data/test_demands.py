@@ -36,6 +36,9 @@ def water_context_country(test_context, request):
     nodes = get_codes(f"node/{region}")
     nodes = list(map(str, nodes[nodes.index("World")].child))
     test_context.map_ISO_c = {region: nodes[0]}
+    # Commit the scenario and set it in context
+    s.commit(comment="test scenario setup")
+    test_context.set_scenario(s)
     test_context["water build info"] = ScenarioInfo(s)
     test_context.RCP = "2p6"
     test_context.REL = "low"
@@ -268,12 +271,7 @@ def test_data_pipeline_preserves_structure(water_context_country, SDG, time):
 
 def test_add_irrigation_demand(water_context_country):
     """Test irrigation demand functionality."""
-    # Get the scenario from context and commit it
-    s = water_context_country["water build info"].scenario
-    s.commit(comment="basic water add_irrigation_demand test model")
-
-    water_context_country.set_scenario(s)
-
+    # The scenario is already committed and set in the context by the fixture
     result = add_irrigation_demand(context=water_context_country)
 
     # Assert the results

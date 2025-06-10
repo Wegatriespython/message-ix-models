@@ -18,13 +18,16 @@ def water_context_regions(test_context, request):
 
     test_context.SDG = "baseline"
     test_context.time = ["year"]
-    test_context.type_reg = "country"
+    # Fix: R12 should be global, not country
+    test_context.type_reg = "global" if region == "R12" else "country"
     test_context.regions = region
     test_context.RCP = "7p0"
 
     nodes = get_codes(f"node/{region}")
     nodes = list(map(str, nodes[nodes.index("World")].child))
-    test_context.map_ISO_c = {region: nodes[0]}
+    # Only set map_ISO_c for country-level regions
+    if test_context.type_reg == "country":
+        test_context.map_ISO_c = {region: nodes[0]}
 
     return test_context
 
@@ -391,3 +394,101 @@ def test_redundant_data_generation(water_context_regions, scenario_base, request
                 f"ISSUE: {redundant_combinations} truly redundant parameter "
                 "combinations found"
             )
+
+
+def test_basin_region_mapping(water_context_regions, scenario_base, request):
+    """Verify basin-to-region mapping is correct with no overlaps."""
+    import pandas as pd
+
+    from message_ix_models.util import package_data_path
+
+    # Only test for R12 regions
+    if water_context_regions.regions != "R12":
+        return
+
+    # Load basin data
+    basin_file = package_data_path("water", "infrastructure", "all_basins.csv")
+    df_basins = pd.read_csv(basin_file)
+
+    # Filter for R12 regions
+    r12_basins = df_basins[df_basins["model_region"] == "R12"]
+
+    print("\nBasin-Region Mapping Analysis for R12:")
+    print(f"Total basins in R12: {len(r12_basins)}")
+
+    # Check regional distribution
+    region_basin_counts = (
+        r12_basins.groupby("REGION")["node"].count().sort_values(ascending=False)
+    )
+    print("Basins per region:")
+    for region, count in region_basin_counts.items():
+        print(f"  {region}: {count} basins")
+
+    # Get unique regions
+    unique_regions = r12_basins["REGION"].unique()
+    print(f"Number of unique regions: {len(unique_regions)}")
+
+    # Check for basin overlaps between regions
+    basin_nodes = r12_basins.groupby("node")["REGION"].nunique()
+    overlapping_basins = basin_nodes[basin_nodes > 1]
+
+    print(f"Basins belonging to multiple regions: {len(overlapping_basins)}")
+    if len(overlapping_basins) > 0:
+        print("Overlapping basins:")
+        for basin in overlapping_basins.items():
+            regions = r12_basins[r12_basins["node"] == basin]["REGION"].unique()
+            print(f"  {basin}: appears in regions {list(regions)}")
+
+    # Check total combinations
+    total_basins = len(r12_basins)
+
+    # Run infrastructure test and check combinations
+    mp = water_context_regions.get_platform()
+    s = Scenario(mp=mp, **scenario_base)
+    s.add_horizon(year=[2020, 2030, 2040])
+    s.add_set("technology", ["tech1", "tech2"])
+    s.add_set("year", [2020, 2030, 2040])
+    s.commit(comment="test basin mapping")
+
+    water_context_regions.set_scenario(s)
+    water_context_regions["water build info"] = ScenarioInfo(s)
+
+    result = add_infrastructure_techs(context=water_context_regions)
+
+    if "input" in result and not result["input"].empty:
+        # Count unique basin-region combinations in result
+        unique_basin_nodes = result["input"]["node_loc"].nunique()
+        unique_origin_nodes = result["input"]["node_origin"].nunique()
+
+        print("\nInfrastructure result analysis:")
+        print(f"Unique basin nodes (node_loc): {unique_basin_nodes}")
+        print(f"Unique origin nodes (node_origin): {unique_origin_nodes}")
+
+        # Check if any basin appears with multiple regions
+        basin_region_mapping = result["input"][
+            ["node_loc", "node_origin"]
+        ].drop_duplicates()
+        basin_multi_regions = basin_region_mapping.groupby("node_loc")[
+            "node_origin"
+        ].nunique()
+        problematic_basins = basin_multi_regions[basin_multi_regions > 1]
+
+        print(
+            f"Basins with multiple origin regions in result: {len(problematic_basins)}"
+        )
+        if len(problematic_basins) > 0:
+            print("Problematic basins:")
+            for basin, region_count in problematic_basins.head(10).items():
+                origins = basin_region_mapping[
+                    basin_region_mapping["node_loc"] == basin
+                ]["node_origin"].unique()
+                print(f"  {basin}: connected to {list(origins)}")
+
+    # Assertions
+    assert len(overlapping_basins) == 0, (
+        f"Found {len(overlapping_basins)} basins in multiple regions"
+    )
+    assert len(unique_regions) == 12, (
+        f"Expected 12 regions in R12, found {len(unique_regions)}"
+    )
+    assert total_basins == 217, f"Expected 217 basins in R12, found {total_basins}"

@@ -261,10 +261,10 @@ def _process_monthly_data(df_dmds: pd.DataFrame, region: str) -> pd.DataFrame:
 
     # Handle urban variable naming inconsistency
     df_m.loc[df_m["variable"] == "urban_withdrawal_baseline", "variable"] = (
-        "urbann_withdrawal2_baseline"
+        "urban_withdrawal2_baseline"
     )
     df_m.loc[df_m["variable"] == "urban_return_baseline", "variable"] = (
-        "urbann_return2_baseline"
+        "urban_return2_baseline"
     )
 
     # Format for concatenation
