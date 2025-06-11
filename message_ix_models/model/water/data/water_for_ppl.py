@@ -982,7 +982,7 @@ def cool_tech(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
 
 
 # Water use & electricity for non-cooling technologies
-def non_cooling_tec(context: "Context") -> dict[str, pd.DataFrame]:
+def non_cooling_tec(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """Process data for water usage of power plants (non-cooling technology related).
     Water withdrawal values for power plants are read in from
     ``tech_water_performance_ssp_msg.csv``
@@ -990,6 +990,8 @@ def non_cooling_tec(context: "Context") -> dict[str, pd.DataFrame]:
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------
@@ -1018,7 +1020,7 @@ def non_cooling_tec(context: "Context") -> dict[str, pd.DataFrame]:
         & (df["water_supply_type"] == "freshwater_supply")
     ]
 
-    scen = context.get_scenario()
+    scen = scenario if scenario is not None else context.get_scenario()
     tec_lt = scen.par("technical_lifetime")
     all_tech = list(tec_lt["technology"].unique())
     # all_tech = list(scen.set("technology"))

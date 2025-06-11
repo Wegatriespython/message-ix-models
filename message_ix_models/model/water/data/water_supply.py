@@ -759,7 +759,7 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
     return results
 
 
-def add_e_flow(context: "Context") -> dict[str, pd.DataFrame]:
+def add_e_flow(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """Add environmental flows
     This function bounds the available water and allocates the environmental
     flows.Environmental flow bounds are calculated using Variable Monthly Flow
@@ -772,6 +772,8 @@ def add_e_flow(context: "Context") -> dict[str, pd.DataFrame]:
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------

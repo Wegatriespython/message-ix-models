@@ -375,7 +375,7 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         print("Testing add_infrastructure_techs with scenario parameter...")
         s.check_out()
         try:
-            infrastructure_data = add_infrastructure_techs(context)
+            infrastructure_data = add_infrastructure_techs(context, scenario=s)
             print(f"Infrastructure data keys: {list(infrastructure_data.keys())}")
             print(f"Infrastructure data sample: {[(k, len(v)) for k, v in infrastructure_data.items()]}")
             if infrastructure_data:
@@ -392,7 +392,7 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         print("Testing add_desalination with scenario parameter...")
         s.check_out()
         try:
-            desalination_data = add_desalination(context)
+            desalination_data = add_desalination(context, scenario=s)
             print(f"Desalination data keys: {list(desalination_data.keys())}")
             print(f"Desalination data sample: {[(k, len(v)) for k, v in desalination_data.items()]}")
             if desalination_data:

@@ -692,12 +692,14 @@ def start_creating_input_dataframe(
         return pd.DataFrame()
 
 
-def add_infrastructure_techs(context: "Context") -> dict[str, pd.DataFrame]:
+def add_infrastructure_techs(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """Process water distribution data for a scenario instance.
 
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------
@@ -709,7 +711,7 @@ def add_infrastructure_techs(context: "Context") -> dict[str, pd.DataFrame]:
     """
     # Step 1: Setup and load data
     df_node, df, sub_time, year_wat = _process_setup_and_data_loading(context)
-    scen = context.get_scenario()
+    scen = scenario if scenario is not None else context.get_scenario()
     results = {}
 
     # Step 2: Prepare data splits and process input parameters
@@ -1120,7 +1122,7 @@ def _process_lower_bounds(
     return pd.DataFrame()
 
 
-def add_desalination(context: "Context") -> dict[str, pd.DataFrame]:
+def add_desalination(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """Add desalination infrastructure with proper basin filtering.
 
     Two types of desalination are considered:
@@ -1130,6 +1132,8 @@ def add_desalination(context: "Context") -> dict[str, pd.DataFrame]:
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------
@@ -1141,7 +1145,7 @@ def add_desalination(context: "Context") -> dict[str, pd.DataFrame]:
     df_desal, df_hist, df_proj, df_node, sub_time, year_wat = (
         _process_desalination_setup_and_data_loading(context)
     )
-    scen = context.get_scenario()
+    scen = scenario if scenario is not None else context.get_scenario()
     results = {}
 
     # Step 2: Filter basins for desalination (coastal only)

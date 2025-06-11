@@ -762,13 +762,15 @@ def _create_recycling_constraints(
 
 
 @minimum_version("message_ix 3.7")
-def add_sectoral_demands(context: "Context") -> dict[str, pd.DataFrame]:
+def add_sectoral_demands(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """
     Adds water sectoral demands using a refactored, modular approach.
 
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------
@@ -946,13 +948,15 @@ def read_water_availability(context: "Context") -> Sequence[pd.DataFrame]:
     return df_sw, df_gw
 
 
-def add_water_availability(context: "Context") -> dict[str, pd.DataFrame]:
+def add_water_availability(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """
     Adds water supply constraints
 
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------
@@ -1019,13 +1023,15 @@ def add_water_availability(context: "Context") -> dict[str, pd.DataFrame]:
     return results
 
 
-def add_irrigation_demand(context: "Context") -> dict[str, pd.DataFrame]:
+def add_irrigation_demand(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """
     Adds endogenous irrigation water demands from GLOBIOM emulator
 
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------
@@ -1036,7 +1042,7 @@ def add_irrigation_demand(context: "Context") -> dict[str, pd.DataFrame]:
     # define an empty dictionary
     results = {}
 
-    scen = context.get_scenario()
+    scen = scenario if scenario is not None else context.get_scenario()
     # add water for irrigation from globiom
     land_out_1 = scen.par(
         "land_output", {"commodity": "Water|Withdrawal|Irrigation|Cereals"}

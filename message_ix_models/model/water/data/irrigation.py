@@ -8,13 +8,15 @@ from message_ix_models.util import broadcast, package_data_path
 
 
 # water & electricity for irrigation
-def add_irr_structure(context: "Context") -> dict[str, pd.DataFrame]:
+def add_irr_structure(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """Add irrigation withdrawal infrastructure
     The irrigation demands are added in
 
     Parameters
     ----------
     context : .Context
+    scenario : .Scenario, optional
+        Scenario to use. If not provided, uses context.get_scenario().
 
     Returns
     -------
