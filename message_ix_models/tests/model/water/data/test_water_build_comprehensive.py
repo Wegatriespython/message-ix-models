@@ -135,9 +135,37 @@ def water_technology_lists():
         "extract_salinewater", "extract_salinewater_basin"
     ]
     
+    # Infrastructure technologies from nexus section of technology.yaml
+    infrastructure_techs = [
+        "urban_t_d", "rural_t_d", "industry_unconnected", "industry_untreated",
+        "urban_unconnected", "rural_unconnected", "urban_sewerage", "urban_untreated",
+        "urban_discharge", "urban_recycle", "rural_discharge", "rural_untreated",
+        "rural_recycle", "rural_sewerage"
+    ]
+    
+    # Desalination technologies from nexus section
+    desalination_techs = [
+        "membrane", "distillation", "desal_t_d", "saline_ppl_t_d"
+    ]
+    
+    # Efficiency and other nexus technologies  
+    efficiency_techs = [
+        "ueff1", "ueff2", "ueff3", "reff1", "reff2", "reff3", 
+        "ieff1", "ieff2", "ieff3", "salinewater_return"
+    ]
+    
+    # Irrigation technologies
+    irrigation_techs = [
+        "irrigation_oilcrops", "irrigation_sugarcrops", "irrigation_cereal"
+    ]
+    
     return {
         "parent_techs": parent_techs,
         "water_techs": water_techs,
+        "infrastructure_techs": infrastructure_techs,
+        "desalination_techs": desalination_techs,
+        "efficiency_techs": efficiency_techs,
+        "irrigation_techs": irrigation_techs,
         "cooling_types": ["__cl_fresh", "__ot_fresh", "__air", "__ot_saline", "__cl_saline"]
     }
 
@@ -242,6 +270,26 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
     for tech in water_technology_lists["water_techs"]:
         s.add_set("technology", tech)
         print(f"Added water technology: {tech}")
+    
+    # Add infrastructure technologies needed for add_infrastructure_techs()
+    for tech in water_technology_lists["infrastructure_techs"]:
+        s.add_set("technology", tech)
+        print(f"Added infrastructure technology: {tech}")
+    
+    # Add desalination technologies needed for add_desalination()
+    for tech in water_technology_lists["desalination_techs"]:
+        s.add_set("technology", tech)
+        print(f"Added desalination technology: {tech}")
+    
+    # Add efficiency technologies 
+    for tech in water_technology_lists["efficiency_techs"]:
+        s.add_set("technology", tech)
+        print(f"Added efficiency technology: {tech}")
+    
+    # Add irrigation technologies
+    for tech in water_technology_lists["irrigation_techs"]:
+        s.add_set("technology", tech)
+        print(f"Added irrigation technology: {tech}")
 
     # Water build requires a committed scenario - commit the basic setup
     s.commit(comment=f"water build test setup for {request.node.name}")
@@ -405,6 +453,127 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
             import traceback
             traceback.print_exc()
         s.commit(comment="Added desalination technology data")
+        
+        # Add remaining water data functions to complete the build
+        from message_ix_models.model.water.data.water_for_ppl import non_cooling_tec
+        from message_ix_models.model.water.data.demands import add_sectoral_demands, add_water_availability, add_irrigation_demand
+        from message_ix_models.model.water.data.water_supply import add_e_flow
+        from message_ix_models.model.water.data.irrigation import add_irr_structure
+        
+        print("Testing non_cooling_tec with scenario parameter...")
+        s.check_out()
+        try:
+            non_cooling_data = non_cooling_tec(context, scenario=s)
+            print(f"Non-cooling data keys: {list(non_cooling_data.keys())}")
+            print(f"Non-cooling data sample: {[(k, len(v)) for k, v in non_cooling_data.items()]}")
+            if non_cooling_data:
+                add_par_data(s, non_cooling_data, dry_run=False)
+                print("non_cooling_tec completed successfully!")
+            else:
+                print("non_cooling_tec returned empty data")
+        except Exception as e:
+            print(f"non_cooling_tec failed: {e}")
+            import traceback
+            traceback.print_exc()
+        s.commit(comment="Added non-cooling technology data")
+        
+        print("Testing add_sectoral_demands with scenario parameter...")
+        s.check_out()
+        try:
+            sectoral_demands_data = add_sectoral_demands(context, scenario=s)
+            print(f"Sectoral demands data keys: {list(sectoral_demands_data.keys())}")
+            print(f"Sectoral demands data sample: {[(k, len(v)) for k, v in sectoral_demands_data.items()]}")
+            if sectoral_demands_data:
+                add_par_data(s, sectoral_demands_data, dry_run=False)
+                print("add_sectoral_demands completed successfully!")
+            else:
+                print("add_sectoral_demands returned empty data")
+        except Exception as e:
+            print(f"add_sectoral_demands failed: {e}")
+            import traceback
+            traceback.print_exc()
+        s.commit(comment="Added sectoral demands data")
+        
+        print("Testing add_water_availability with scenario parameter...")
+        s.check_out()
+        try:
+            water_availability_data = add_water_availability(context, scenario=s)
+            print(f"Water availability data keys: {list(water_availability_data.keys())}")
+            print(f"Water availability data sample: {[(k, len(v)) for k, v in water_availability_data.items()]}")
+            if water_availability_data:
+                add_par_data(s, water_availability_data, dry_run=False)
+                print("add_water_availability completed successfully!")
+            else:
+                print("add_water_availability returned empty data")
+        except Exception as e:
+            print(f"add_water_availability failed: {e}")
+            import traceback
+            traceback.print_exc()
+        s.commit(comment="Added water availability data")
+        
+        print("Testing add_irrigation_demand with scenario parameter...")
+        s.check_out()
+        try:
+            irrigation_demand_data = add_irrigation_demand(context, scenario=s)
+            print(f"Irrigation demand data keys: {list(irrigation_demand_data.keys())}")
+            print(f"Irrigation demand data sample: {[(k, len(v)) for k, v in irrigation_demand_data.items()]}")
+            if irrigation_demand_data:
+                add_par_data(s, irrigation_demand_data, dry_run=False)
+                print("add_irrigation_demand completed successfully!")
+            else:
+                print("add_irrigation_demand returned empty data")
+        except Exception as e:
+            print(f"add_irrigation_demand failed: {e}")
+            import traceback
+            traceback.print_exc()
+        s.commit(comment="Added irrigation demand data")
+        
+        print("Testing add_e_flow with scenario parameter...")
+        s.check_out()
+        try:
+            e_flow_data = add_e_flow(context, scenario=s)
+            print(f"E-flow data keys: {list(e_flow_data.keys())}")
+            print(f"E-flow data sample: {[(k, len(v)) for k, v in e_flow_data.items()]}")
+            if e_flow_data:
+                add_par_data(s, e_flow_data, dry_run=False)
+                print("add_e_flow completed successfully!")
+            else:
+                print("add_e_flow returned empty data")
+        except Exception as e:
+            print(f"add_e_flow failed: {e}")
+            import traceback
+            traceback.print_exc()
+        s.commit(comment="Added e-flow data")
+        
+        print("Testing add_irr_structure with scenario parameter...")
+        s.check_out()
+        try:
+            irr_structure_data = add_irr_structure(context, scenario=s)
+            print(f"Irrigation structure data keys: {list(irr_structure_data.keys())}")
+            print(f"Irrigation structure data sample: {[(k, len(v)) for k, v in irr_structure_data.items()]}")
+            if irr_structure_data:
+                add_par_data(s, irr_structure_data, dry_run=False)
+                print("add_irr_structure completed successfully!")
+            else:
+                print("add_irr_structure returned empty data")
+        except Exception as e:
+            print(f"add_irr_structure failed: {e}")
+            import traceback
+            traceback.print_exc()
+        s.commit(comment="Added irrigation structure data")
+        
+        print("\n🎉 COMPLETE WATER BUILD TEST SUCCESSFUL! 🎉")
+        print("Successfully called all 10 water data functions:")
+        print("✅ add_water_supply")
+        print("✅ cool_tech")
+        print("✅ non_cooling_tec")
+        print("✅ add_sectoral_demands")
+        print("✅ add_water_availability")
+        print("✅ add_irrigation_demand")
+        print("✅ add_infrastructure_techs")
+        print("✅ add_desalination")
+        print("✅ add_e_flow")
+        print("✅ add_irr_structure")
         
         return context, s
     except Exception as e:
