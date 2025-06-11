@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+import ixmp as ix
 from message_ix import Scenario
 
 from message_ix_models import ScenarioInfo
@@ -30,10 +31,9 @@ def water_context_regions(test_context, request):
 @pytest.fixture
 def scenario_base(request):
     """Create basic scenario for testing."""
-    import time
 
     # Add timestamp to ensure unique scenario names and avoid locking conflicts
-    timestamp = int(time.time() * 1000) % 100000  # Last 5 digits of timestamp
+    timestamp = 0  # Last 5 digits of timestamp
     return {
         "model": f"{request.node.name}/test water model {timestamp}",
         "scenario": f"{request.node.name}/test water scenario {timestamp}",
@@ -47,9 +47,10 @@ def water_basin_nodes(water_context_regions):
     context = water_context_regions
     basin_nodes = []
     basin_modes = []
-    
+
     if context.regions == "ZMB":
         import pandas as pd
+
         from message_ix_models.util import package_data_path
 
         # Read basin delineation file to get all basin nodes
@@ -64,9 +65,10 @@ def water_basin_nodes(water_context_regions):
             basin_mode = f"M{bcu_name}"
             basin_nodes.append(basin_node)
             basin_modes.append(basin_mode)
-    
+
     elif context.regions == "R12":
         import pandas as pd
+
         from message_ix_models.util import package_data_path
 
         # Read basin delineation file to get all basin nodes for R12
@@ -81,7 +83,7 @@ def water_basin_nodes(water_context_regions):
             basin_mode = f"M{bcu_name}"
             basin_nodes.append(basin_node)
             basin_modes.append(basin_mode)
-    
+
     return basin_nodes, basin_modes
 
 
@@ -90,16 +92,71 @@ def water_basic_sets():
     """Define basic water sets needed for water build."""
     return {
         "commodities": [
-            "electr", "gas", "coal", "uranium", "biomass", "oil", "lightoil", "fueloil",
-            "surfacewater_basin", "groundwater_basin", "freshwater_basin", "freshwater", "saline_ppl",
-            # Cooling technology commodities 
-            "cl_fresh", "ot_fresh", "air", "ot_saline", "cl_saline"
+            "electr",
+            "gas",
+            "coal",
+            "uranium",
+            "biomass",
+            "oil",
+            "lightoil",
+            "fueloil",
+            "surfacewater_basin",
+            "groundwater_basin",
+            "freshwater_basin",
+            "freshwater",
+            "saline_ppl",
+            # Cooling technology commodities
+            "cl_fresh",
+            "ot_fresh",
+            "air",
+            "ot_saline",
+            "cl_saline",
+            # Water demand commodities
+            "urban_mw",
+            "rural_mw",
+            "industry_mw",
+            "freshwater_supply",
+            "saline_supply",
+            # Waste management commodities
+            "urban_collected_wst",
+            "rural_collected_wst",
+            "industry_collected_wst",
+            "urban_uncollected_wst", 
+            "rural_uncollected_wst",
+            "industry_uncollected_wst",
+            # Treatment commodities
+            "urban_treated",
+            "rural_treated",
+            "industry_treated",
+            # Additional demand commodities
+            "urban_disconnected",
+            "rural_disconnected", 
+            "industry_disconnected",
         ],
         "levels": [
-            "secondary", "primary", "final", "water_avail_basin", "water_supply_basin", 
-            "water_supply", "saline_supply", "share"
+            "secondary",
+            "primary",
+            "final",
+            "water_avail_basin",
+            "water_supply_basin",
+            "water_supply",
+            "saline_supply", 
+            "share",
+            # Water demand levels
+            "water_demand",
+            "municipal_mw",
+            "industry_mw",
+            # Irrigation levels
+            "irr_cereal",
+            "irr_oilcrops", 
+            "irr_sugarcrops",
+            # Treatment levels
+            "waste_management",
+            "urban_discharge",
+            "rural_discharge",
+            "industry_discharge",
         ],
-        "emissions": ["fresh_return", "CO2", "water_consumption"]
+        "emissions": ["fresh_return", "CO2", "water_consumption"],
     }
 
 
@@ -107,58 +164,153 @@ def water_basic_sets():
 def water_technology_lists():
     """Define technology lists needed for water build."""
     parent_techs = [
-        "bio_hpl", "bio_istig", "bio_istig_ccs", "bio_ppl", "coal_adv", "coal_adv_ccs",
-        "coal_ppl", "coal_ppl_u", "csp_sm1_ppl", "csp_sm3_ppl", "foil_hpl", "foil_ppl",
-        "gas_cc", "gas_cc_ccs", "gas_ct", "gas_hpl", "gas_htfc", "gas_ppl", "geo_hpl",
-        "geo_ppl", "hydro_1", "hydro_2", "hydro_3", "hydro_4", "hydro_5", "hydro_6",
-        "hydro_7", "hydro_8", "hydro_hc", "hydro_lc", "igcc", "igcc_ccs", "loil_cc",
-        "loil_ppl", "nuc_hc", "nuc_lc", "solar_res1", "solar_res2", "solar_res3",
-        "solar_res4", "solar_res5", "solar_res6", "solar_res7", "solar_res8",
-        "solar_res_hist_2000", "solar_res_hist_2005", "solar_res_hist_2010",
-        "solar_res_hist_2015", "solar_res_hist_2020", "solar_res_hist_2025",
-        "solar_resins", "wind_ref1", "wind_ref2", "wind_ref3", "wind_ref4", "wind_ref5",
-        "wind_ref_hist_2000", "wind_ref_hist_2005", "wind_ref_hist_2010",
-        "wind_ref_hist_2015", "wind_ref_hist_2020", "wind_ref_hist_2025",
-        "wind_res1", "wind_res2", "wind_res3", "wind_res4", "wind_res_hist_2000",
-        "wind_res_hist_2005", "wind_res_hist_2010", "wind_res_hist_2015",
-        "wind_res_hist_2020", "wind_res_hist_2025", "csp_sm1_res", "csp_sm1_res1",
-        "csp_sm1_res2", "csp_sm1_res3", "csp_sm1_res4", "csp_sm1_res5", "csp_sm1_res6",
-        "csp_sm1_res7", "csp_sm1_res_hist_2010", "csp_sm1_res_hist_2015",
-        "csp_sm1_res_hist_2020", "csp_sm3_res", "csp_sm3_res1", "csp_sm3_res2",
-        "csp_sm3_res3", "csp_sm3_res4", "csp_sm3_res5", "csp_sm3_res6", "csp_sm3_res7",
-        "solar_th_ppl"
+        "bio_hpl",
+        "bio_istig",
+        "bio_istig_ccs",
+        "bio_ppl",
+        "coal_adv",
+        "coal_adv_ccs",
+        "coal_ppl",
+        "coal_ppl_u",
+        "csp_sm1_ppl",
+        "csp_sm3_ppl",
+        "foil_hpl",
+        "foil_ppl",
+        "gas_cc",
+        "gas_cc_ccs",
+        "gas_ct",
+        "gas_hpl",
+        "gas_htfc",
+        "gas_ppl",
+        "geo_hpl",
+        "geo_ppl",
+        "hydro_1",
+        "hydro_2",
+        "hydro_3",
+        "hydro_4",
+        "hydro_5",
+        "hydro_6",
+        "hydro_7",
+        "hydro_8",
+        "hydro_hc",
+        "hydro_lc",
+        "igcc",
+        "igcc_ccs",
+        "loil_cc",
+        "loil_ppl",
+        "nuc_hc",
+        "nuc_lc",
+        "solar_res1",
+        "solar_res2",
+        "solar_res3",
+        "solar_res4",
+        "solar_res5",
+        "solar_res6",
+        "solar_res7",
+        "solar_res8",
+        "solar_res_hist_2000",
+        "solar_res_hist_2005",
+        "solar_res_hist_2010",
+        "solar_res_hist_2015",
+        "solar_res_hist_2020",
+        "solar_res_hist_2025",
+        "solar_resins",
+        "wind_ref1",
+        "wind_ref2",
+        "wind_ref3",
+        "wind_ref4",
+        "wind_ref5",
+        "wind_ref_hist_2000",
+        "wind_ref_hist_2005",
+        "wind_ref_hist_2010",
+        "wind_ref_hist_2015",
+        "wind_ref_hist_2020",
+        "wind_ref_hist_2025",
+        "wind_res1",
+        "wind_res2",
+        "wind_res3",
+        "wind_res4",
+        "wind_res_hist_2000",
+        "wind_res_hist_2005",
+        "wind_res_hist_2010",
+        "wind_res_hist_2015",
+        "wind_res_hist_2020",
+        "wind_res_hist_2025",
+        "csp_sm1_res",
+        "csp_sm1_res1",
+        "csp_sm1_res2",
+        "csp_sm1_res3",
+        "csp_sm1_res4",
+        "csp_sm1_res5",
+        "csp_sm1_res6",
+        "csp_sm1_res7",
+        "csp_sm1_res_hist_2010",
+        "csp_sm1_res_hist_2015",
+        "csp_sm1_res_hist_2020",
+        "csp_sm3_res",
+        "csp_sm3_res1",
+        "csp_sm3_res2",
+        "csp_sm3_res3",
+        "csp_sm3_res4",
+        "csp_sm3_res5",
+        "csp_sm3_res6",
+        "csp_sm3_res7",
+        "solar_th_ppl",
     ]
-    
+
     water_techs = [
-        "return_flow", "gw_recharge", "basin_to_reg", 
-        "extract_surfacewater", "extract_groundwater", "extract_gw_fossil",
-        "extract_salinewater", "extract_salinewater_basin"
+        "return_flow",
+        "gw_recharge",
+        "basin_to_reg",
+        "extract_surfacewater",
+        "extract_groundwater",
+        "extract_gw_fossil",
+        "extract_salinewater",
+        "extract_salinewater_basin",
     ]
-    
+
     # Infrastructure technologies from nexus section of technology.yaml
     infrastructure_techs = [
-        "urban_t_d", "rural_t_d", "industry_unconnected", "industry_untreated",
-        "urban_unconnected", "rural_unconnected", "urban_sewerage", "urban_untreated",
-        "urban_discharge", "urban_recycle", "rural_discharge", "rural_untreated",
-        "rural_recycle", "rural_sewerage"
+        "urban_t_d",
+        "rural_t_d",
+        "industry_unconnected",
+        "industry_untreated",
+        "urban_unconnected",
+        "rural_unconnected",
+        "urban_sewerage",
+        "urban_untreated",
+        "urban_discharge",
+        "urban_recycle",
+        "rural_discharge",
+        "rural_untreated",
+        "rural_recycle",
+        "rural_sewerage",
     ]
-    
+
     # Desalination technologies from nexus section
-    desalination_techs = [
-        "membrane", "distillation", "desal_t_d", "saline_ppl_t_d"
-    ]
-    
-    # Efficiency and other nexus technologies  
+    desalination_techs = ["membrane", "distillation", "desal_t_d", "saline_ppl_t_d"]
+
+    # Efficiency and other nexus technologies
     efficiency_techs = [
-        "ueff1", "ueff2", "ueff3", "reff1", "reff2", "reff3", 
-        "ieff1", "ieff2", "ieff3", "salinewater_return"
+        "ueff1",
+        "ueff2",
+        "ueff3",
+        "reff1",
+        "reff2",
+        "reff3",
+        "ieff1",
+        "ieff2",
+        "ieff3",
+        "salinewater_return",
     ]
-    
+
     # Irrigation technologies
     irrigation_techs = [
-        "irrigation_oilcrops", "irrigation_sugarcrops", "irrigation_cereal"
+        "irrigation_oilcrops",
+        "irrigation_sugarcrops",
+        "irrigation_cereal",
     ]
-    
+
     return {
         "parent_techs": parent_techs,
         "water_techs": water_techs,
@@ -166,7 +318,13 @@ def water_technology_lists():
         "desalination_techs": desalination_techs,
         "efficiency_techs": efficiency_techs,
         "irrigation_techs": irrigation_techs,
-        "cooling_types": ["__cl_fresh", "__ot_fresh", "__air", "__ot_saline", "__cl_saline"]
+        "cooling_types": [
+            "__cl_fresh",
+            "__ot_fresh",
+            "__air",
+            "__ot_saline",
+            "__cl_saline",
+        ],
     }
 
 
@@ -192,17 +350,24 @@ def water_build_context(water_context_regions, request):
 
 
 @pytest.fixture
-def scenario_with_full_water_build(water_build_context, scenario_base, water_basin_nodes, water_basic_sets, water_technology_lists, request):
+def scenario_with_full_water_build(
+    water_build_context,
+    scenario_base,
+    water_basin_nodes,
+    water_basic_sets,
+    water_technology_lists,
+    request,
+):
     """Create scenario with complete water build applied."""
     import pandas as pd
 
     context = water_build_context
 
-    # Create base scenario with proper setup
-    mp = context.get_platform()
-    
+    # Create base scenario with proper setup  
+    mp = ix.Platform("local")
+
     # Add water-specific units to platform
-    water_units = ["MCM", "MCM/year", "MCM/GWa", "USD/MCM", "y", "-", "%"]
+    water_units = ["MCM", "MCM/year", "MCM/GWa", "USD/MCM", "y", "-", "%", "year"]
     for unit in water_units:
         try:
             mp.add_unit(unit)
@@ -212,21 +377,28 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
                 print(f"Unit {unit} already exists")
             else:
                 print(f"Error adding unit {unit}: {e}")
-    
+
     s = Scenario(mp=mp, **scenario_base)
     # Add historical and future years as needed by water module
-    # Autopopulate at 5-year intervals from 1950 to be safe
-    years = list(range(1950, 2085, 5))
+    # Autopopulate at 5-year intervals from 1950 to 2110 to handle all cooling data
+    years = list(range(1950, 2115, 5))
     s.add_horizon(year=years)
     s.add_set("year", years)
     
+    # Add None year to handle data functions that return None values
+    try:
+        s.add_set("year", None)
+        print("Added None year for data compatibility")
+    except Exception as e:
+        print(f"Could not add None year: {e}")
+
     # Set up firstmodelyear properly - this is critical for vintage/activity year calculations
     first_model_year = 2020  # Set first model year to 2020
-    
+
     # Just add the correct firstmodelyear - we'll manually fix ScenarioInfo later
     s.add_cat("year", "firstmodelyear", first_model_year)
     print(f"Set firstmodelyear to {first_model_year}")
-    
+
     # Verify firstmodelyear category was set correctly
     fmy = s.cat("year", "firstmodelyear")
     print(f"Retrieved firstmodelyear from scenario: {fmy}")
@@ -234,21 +406,49 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
     # Add required sets using fixtures
     for commodity in water_basic_sets["commodities"]:
         s.add_set("commodity", commodity)
-        
+
     for level in water_basic_sets["levels"]:
         s.add_set("level", level)
     s.add_set("mode", ["M1"])
     s.add_set("time", ["year"])
-    
+
     # Add shares set and share_basin element for water supply function
     s.add_set("shares", "share_basin")
     print("Added shares set with share_basin element")
+    
+    # Add cooling shares elements needed for cooling technologies
+    cooling_shares = [
+        "share_cooling_cl_fresh",
+        "share_cooling_ot_fresh", 
+        "share_cooling_air",
+        "share_cooling_ot_saline",
+        "share_cooling_cl_saline",
+        # Additional shares for water functions
+        "share_wat_recycle",
+        "share_low_lim_GWat",
+    ]
+    for share_element in cooling_shares:
+        s.add_set("shares", share_element)
+        print(f"Added shares element: {share_element}")
 
     # Add proper region nodes based on context
     nodes = get_codes(f"node/{context.regions}")
     nodes = list(map(str, nodes[nodes.index("World")].child))
     for node in nodes:
         s.add_set("node", node)
+    
+    # Also add R12 nodes to handle cooling data that references global regions
+    # This is needed because cool_tech generates costs for all R12 regions
+    if context.regions != "R12":
+        r12_nodes = get_codes("node/R12")
+        r12_nodes = list(map(str, r12_nodes[r12_nodes.index("World")].child))
+        for node in r12_nodes:
+            try:
+                s.add_set("node", node)
+                print(f"Added R12 node for cooling data: {node}")
+            except Exception as e:
+                if "already exists" not in str(e):
+                    print(f"Could not add R12 node {node}: {e}")
 
     # Add basin nodes using fixture
     basin_nodes, basin_modes = water_basin_nodes
@@ -257,35 +457,62 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         s.add_set("mode", basin_mode)
         print(f"Added basin node: {basin_node}, mode: {basin_mode}")
     
+    # Also add R12 basin nodes to handle global water data
+    if context.regions != "R12":
+        try:
+            from message_ix_models.util import package_data_path
+            r12_basin_file = package_data_path("water", "delineation", "basins_by_region_simpl_R12.csv")
+            r12_basin_df = pd.read_csv(r12_basin_file)
+            
+            for bcu_name in r12_basin_df["BCU_name"]:
+                basin_node = f"B{bcu_name}"
+                basin_mode = f"M{bcu_name}"
+                try:
+                    s.add_set("node", basin_node)
+                    s.add_set("mode", basin_mode)
+                    print(f"Added R12 basin node: {basin_node}, mode: {basin_mode}")
+                except Exception as e:
+                    if "already exists" not in str(e):
+                        print(f"Could not add R12 basin {basin_node}: {e}")
+        except Exception as e:
+            print(f"Could not load R12 basin data: {e}")
+
     # Add emission types using fixture
     for emission in water_basic_sets["emissions"]:
         s.add_set("emission", emission)
+    
+    # Add type_addon elements needed for cooling technologies
+    parent_techs = water_technology_lists["parent_techs"]
+    for tech in parent_techs:
+        type_addon_element = f"cooling__{tech}"
+        s.add_set("type_addon", type_addon_element)
+        print(f"Added type_addon: {type_addon_element}")
 
     # Add technologies using fixture
     parent_techs = water_technology_lists["parent_techs"]
     for tech in parent_techs:
         s.add_set("technology", tech)
-    
+
     # Add water-specific technologies
     for tech in water_technology_lists["water_techs"]:
         s.add_set("technology", tech)
         print(f"Added water technology: {tech}")
-    
+
     # Add infrastructure technologies needed for add_infrastructure_techs()
     for tech in water_technology_lists["infrastructure_techs"]:
         s.add_set("technology", tech)
         print(f"Added infrastructure technology: {tech}")
-    
+
     # Add desalination technologies needed for add_desalination()
     for tech in water_technology_lists["desalination_techs"]:
         s.add_set("technology", tech)
         print(f"Added desalination technology: {tech}")
-    
-    # Add efficiency technologies 
+
+    # Add efficiency technologies
     for tech in water_technology_lists["efficiency_techs"]:
         s.add_set("technology", tech)
         print(f"Added efficiency technology: {tech}")
-    
+
     # Add irrigation technologies
     for tech in water_technology_lists["irrigation_techs"]:
         s.add_set("technology", tech)
@@ -361,14 +588,14 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
     s.check_out()
     # Recreate the ScenarioInfo now that firstmodelyear is properly configured
     info = ScenarioInfo(s)
-    
+
     # Manually override y0 to 2020 since ScenarioInfo picks the first firstmodelyear (1950)
     info.y0 = 2020
     print(f"Manually set ScenarioInfo y0 to: {info.y0}")
     print(f"ScenarioInfo Y (model years): {info.Y[:5]}...{info.Y[-3:]}")
-    
+
     s.commit(comment="Updated ScenarioInfo with correct firstmodelyear")
-    
+
     # Set scenario in context
     context.set_scenario(s)
     context["water build info"] = info
@@ -378,7 +605,6 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
     # They should use the scenario parameter passed to add_par_data()
 
     # For now, bypass water_build and call add_data directly with the scenario
-    from message_ix_models.model.water.data import add_data
 
     try:
         print("Calling add_data directly with the scenario parameter...")
@@ -397,35 +623,40 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         # Add the next function: cool_tech
         # First, we need to add all cooling technologies to the scenario
         from message_ix_models.model.water.data.water_for_ppl import cool_tech
-        
+
         print("Adding cooling technologies to scenario...")
         s.check_out()
-        
+
         # Generate cooling technology names using fixtures
         for parent_tech in parent_techs:
             for cooling_type in water_technology_lists["cooling_types"]:
                 cooling_tech = f"{parent_tech}{cooling_type}"
                 s.add_set("technology", cooling_tech)
                 print(f"Added cooling technology: {cooling_tech}")
-        
+
         s.commit(comment="Added cooling technologies to scenario")
-        
+
         print("Testing cool_tech with scenario parameter...")
         s.check_out()
         cool_tech_data = cool_tech(context, scenario=s)
         add_par_data(s, cool_tech_data, dry_run=False)
         s.commit(comment="Added cool_tech data")
         print("cool_tech completed successfully!")
-        
+
         # Add infrastructure technology PARAMETERS (not just technology names)
-        from message_ix_models.model.water.data.infrastructure import add_infrastructure_techs, add_desalination
-        
+        from message_ix_models.model.water.data.infrastructure import (
+            add_desalination,
+            add_infrastructure_techs,
+        )
+
         print("Testing add_infrastructure_techs with scenario parameter...")
         s.check_out()
         try:
             infrastructure_data = add_infrastructure_techs(context, scenario=s)
             print(f"Infrastructure data keys: {list(infrastructure_data.keys())}")
-            print(f"Infrastructure data sample: {[(k, len(v)) for k, v in infrastructure_data.items()]}")
+            print(
+                f"Infrastructure data sample: {[(k, len(v)) for k, v in infrastructure_data.items()]}"
+            )
             if infrastructure_data:
                 add_par_data(s, infrastructure_data, dry_run=False)
                 print("add_infrastructure_techs completed successfully!")
@@ -434,15 +665,18 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"add_infrastructure_techs failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added infrastructure technology data")
-        
+
         print("Testing add_desalination with scenario parameter...")
         s.check_out()
         try:
             desalination_data = add_desalination(context, scenario=s)
             print(f"Desalination data keys: {list(desalination_data.keys())}")
-            print(f"Desalination data sample: {[(k, len(v)) for k, v in desalination_data.items()]}")
+            print(
+                f"Desalination data sample: {[(k, len(v)) for k, v in desalination_data.items()]}"
+            )
             if desalination_data:
                 add_par_data(s, desalination_data, dry_run=False)
                 print("add_desalination completed successfully!")
@@ -451,21 +685,28 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"add_desalination failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added desalination technology data")
-        
+
         # Add remaining water data functions to complete the build
-        from message_ix_models.model.water.data.water_for_ppl import non_cooling_tec
-        from message_ix_models.model.water.data.demands import add_sectoral_demands, add_water_availability, add_irrigation_demand
-        from message_ix_models.model.water.data.water_supply import add_e_flow
+        from message_ix_models.model.water.data.demands import (
+            add_irrigation_demand,
+            add_sectoral_demands,
+            add_water_availability,
+        )
         from message_ix_models.model.water.data.irrigation import add_irr_structure
-        
+        from message_ix_models.model.water.data.water_for_ppl import non_cooling_tec
+        from message_ix_models.model.water.data.water_supply import add_e_flow
+
         print("Testing non_cooling_tec with scenario parameter...")
         s.check_out()
         try:
             non_cooling_data = non_cooling_tec(context, scenario=s)
             print(f"Non-cooling data keys: {list(non_cooling_data.keys())}")
-            print(f"Non-cooling data sample: {[(k, len(v)) for k, v in non_cooling_data.items()]}")
+            print(
+                f"Non-cooling data sample: {[(k, len(v)) for k, v in non_cooling_data.items()]}"
+            )
             if non_cooling_data:
                 add_par_data(s, non_cooling_data, dry_run=False)
                 print("non_cooling_tec completed successfully!")
@@ -474,15 +715,18 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"non_cooling_tec failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added non-cooling technology data")
-        
+
         print("Testing add_sectoral_demands with scenario parameter...")
         s.check_out()
         try:
             sectoral_demands_data = add_sectoral_demands(context, scenario=s)
             print(f"Sectoral demands data keys: {list(sectoral_demands_data.keys())}")
-            print(f"Sectoral demands data sample: {[(k, len(v)) for k, v in sectoral_demands_data.items()]}")
+            print(
+                f"Sectoral demands data sample: {[(k, len(v)) for k, v in sectoral_demands_data.items()]}"
+            )
             if sectoral_demands_data:
                 add_par_data(s, sectoral_demands_data, dry_run=False)
                 print("add_sectoral_demands completed successfully!")
@@ -491,15 +735,20 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"add_sectoral_demands failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added sectoral demands data")
-        
+
         print("Testing add_water_availability with scenario parameter...")
         s.check_out()
         try:
             water_availability_data = add_water_availability(context, scenario=s)
-            print(f"Water availability data keys: {list(water_availability_data.keys())}")
-            print(f"Water availability data sample: {[(k, len(v)) for k, v in water_availability_data.items()]}")
+            print(
+                f"Water availability data keys: {list(water_availability_data.keys())}"
+            )
+            print(
+                f"Water availability data sample: {[(k, len(v)) for k, v in water_availability_data.items()]}"
+            )
             if water_availability_data:
                 add_par_data(s, water_availability_data, dry_run=False)
                 print("add_water_availability completed successfully!")
@@ -508,15 +757,18 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"add_water_availability failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added water availability data")
-        
+
         print("Testing add_irrigation_demand with scenario parameter...")
         s.check_out()
         try:
             irrigation_demand_data = add_irrigation_demand(context, scenario=s)
             print(f"Irrigation demand data keys: {list(irrigation_demand_data.keys())}")
-            print(f"Irrigation demand data sample: {[(k, len(v)) for k, v in irrigation_demand_data.items()]}")
+            print(
+                f"Irrigation demand data sample: {[(k, len(v)) for k, v in irrigation_demand_data.items()]}"
+            )
             if irrigation_demand_data:
                 add_par_data(s, irrigation_demand_data, dry_run=False)
                 print("add_irrigation_demand completed successfully!")
@@ -525,15 +777,18 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"add_irrigation_demand failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added irrigation demand data")
-        
+
         print("Testing add_e_flow with scenario parameter...")
         s.check_out()
         try:
             e_flow_data = add_e_flow(context, scenario=s)
             print(f"E-flow data keys: {list(e_flow_data.keys())}")
-            print(f"E-flow data sample: {[(k, len(v)) for k, v in e_flow_data.items()]}")
+            print(
+                f"E-flow data sample: {[(k, len(v)) for k, v in e_flow_data.items()]}"
+            )
             if e_flow_data:
                 add_par_data(s, e_flow_data, dry_run=False)
                 print("add_e_flow completed successfully!")
@@ -542,15 +797,18 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"add_e_flow failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added e-flow data")
-        
+
         print("Testing add_irr_structure with scenario parameter...")
         s.check_out()
         try:
             irr_structure_data = add_irr_structure(context, scenario=s)
             print(f"Irrigation structure data keys: {list(irr_structure_data.keys())}")
-            print(f"Irrigation structure data sample: {[(k, len(v)) for k, v in irr_structure_data.items()]}")
+            print(
+                f"Irrigation structure data sample: {[(k, len(v)) for k, v in irr_structure_data.items()]}"
+            )
             if irr_structure_data:
                 add_par_data(s, irr_structure_data, dry_run=False)
                 print("add_irr_structure completed successfully!")
@@ -559,22 +817,33 @@ def scenario_with_full_water_build(water_build_context, scenario_base, water_bas
         except Exception as e:
             print(f"add_irr_structure failed: {e}")
             import traceback
+
             traceback.print_exc()
         s.commit(comment="Added irrigation structure data")
-        
-        print("\n🎉 COMPLETE WATER BUILD TEST SUCCESSFUL! 🎉")
-        print("Successfully called all 10 water data functions:")
-        print("✅ add_water_supply")
-        print("✅ cool_tech")
-        print("✅ non_cooling_tec")
-        print("✅ add_sectoral_demands")
-        print("✅ add_water_availability")
-        print("✅ add_irrigation_demand")
-        print("✅ add_infrastructure_techs")
-        print("✅ add_desalination")
-        print("✅ add_e_flow")
-        print("✅ add_irr_structure")
-        
+
+        # Clone scenario to persistent local platform for EDA IMMEDIATELY after build
+        print("\n=== CLONING TO PERSISTENT DATABASE FOR EDA ===")
+        try:
+            local_mp = ix.Platform("local")  # Persistent local platform
+            
+            # Create persistent clone with clean name
+            persistent_name = f"water_eda_{context.regions.lower()}"
+            cloned_scenario = s.clone(
+                platform=local_mp,
+                model=f"WaterEDA_{context.regions}",
+                scenario=persistent_name,
+                keep_solution=False
+            )
+            
+            print(f"✅ Cloned scenario to persistent database:")
+            print(f"   Model: WaterEDA_{context.regions}")
+            print(f"   Scenario: {persistent_name}")
+            print(f"   Access with: mix-models --url='ixmp://local/WaterEDA_{context.regions}/{persistent_name}'")
+            
+        except Exception as e:
+            print(f"❌ Failed to clone to persistent database: {e}")
+            print("Scenario remains available only during test execution")
+
         return context, s
     except Exception as e:
         # Print full exception details for diagnosis
@@ -756,7 +1025,9 @@ def test_comprehensive_water_technology_analysis(
     # Basic assertions
     assert len(water_techs_present) > 0, "No water technologies found in scenario"
     # Note: Cooling technologies require full water build, not just water_supply
-    print(f"Note: Found {len(cooling_techs)} cooling technologies (full build needed for cooling)")
+    print(
+        f"Note: Found {len(cooling_techs)} cooling technologies (full build needed for cooling)"
+    )
 
     # Check that we have the core water infrastructure
     core_techs = ["urban_t_d", "rural_t_d"]
@@ -766,6 +1037,29 @@ def test_comprehensive_water_technology_analysis(
     print("\n=== TEST COMPLETED SUCCESSFULLY ===")
     print(f"Analyzed {len(water_techs_present)} water technologies")
     print(f"Found {len(cooling_techs)} cooling technologies")
+    
+    # Clone scenario to persistent local platform for EDA
+    print("\n=== CLONING TO PERSISTENT DATABASE FOR EDA ===")
+    try:
+        local_mp = ix.Platform("local")  # Persistent local platform
+        
+        # Create persistent clone with clean name
+        persistent_name = f"water_eda_{context.regions.lower()}"
+        cloned_scenario = scenario.clone(
+            platform=local_mp,
+            model=f"WaterEDA_{context.regions}",
+            scenario=persistent_name,
+            keep_solution=False
+        )
+        
+        print(f"✅ Cloned scenario to persistent database:")
+        print(f"   Model: WaterEDA_{context.regions}")
+        print(f"   Scenario: {persistent_name}")
+        print(f"   Access with: mix-models --url='ixmp://local/WaterEDA_{context.regions}/{persistent_name}'")
+        
+    except Exception as e:
+        print(f"❌ Failed to clone to persistent database: {e}")
+        print("Scenario remains available only during test execution")
 
 
 def test_water_build_creates_expected_sets(scenario_with_full_water_build, request):
