@@ -146,7 +146,7 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
     # Reference to the water configuration
     info = context["water build info"]
     # load the scenario from context
-    scen = context.get_scenario()
+    scen = scenario if scenario is not None else context.get_scenario()
     # scen = Scenario(context.get_platform(), **context.core.scenario_info)
 
     fut_year = info.Y
@@ -350,7 +350,8 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
         # ])
 
         # input data frame  for freshwater supply
-        yv_ya_sw = map_yv_ya_lt(year_wat, 50, first_year)
+        # Use first basin node for vintage-activity year mapping
+        yv_ya_sw = map_yv_ya_lt(scen, df_node["node"].iloc[0], "extract_surfacewater")
 
         inp = pd.concat(
             [
@@ -376,7 +377,8 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
         )
 
         # input dataframe  for groundwater supply
-        yv_ya_gw = map_yv_ya_lt(year_wat, 20, first_year)
+        # Use first basin node for vintage-activity year mapping
+        yv_ya_gw = map_yv_ya_lt(scen, df_node["node"].iloc[0], "extract_groundwater")
         inp = pd.concat(
             [
                 inp,
