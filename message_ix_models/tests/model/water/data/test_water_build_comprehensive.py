@@ -42,6 +42,94 @@ def scenario_base(request):
 
 
 @pytest.fixture
+def water_basin_nodes(water_context_regions):
+    """Generate basin node names based on region."""
+    context = water_context_regions
+    basin_nodes = []
+    basin_modes = []
+    
+    if context.regions == "ZMB":
+        import pandas as pd
+        from message_ix_models.util import package_data_path
+
+        # Read basin delineation file to get all basin nodes
+        basin_file = package_data_path(
+            "water", "delineation", f"basins_by_region_simpl_{context.regions}.csv"
+        )
+        basin_df = pd.read_csv(basin_file)
+
+        # Generate basin nodes (format: B + BCU_name) and corresponding modes (format: M + BCU_name)
+        for bcu_name in basin_df["BCU_name"]:
+            basin_node = f"B{bcu_name}"
+            basin_mode = f"M{bcu_name}"
+            basin_nodes.append(basin_node)
+            basin_modes.append(basin_mode)
+    
+    elif context.regions == "R12":
+        # Add R12 basin logic if needed
+        pass
+    
+    return basin_nodes, basin_modes
+
+
+@pytest.fixture
+def water_basic_sets():
+    """Define basic water sets needed for water build."""
+    return {
+        "commodities": [
+            "electr", "gas", "coal", "uranium", "biomass", "oil", "lightoil", "fueloil",
+            "surfacewater_basin", "groundwater_basin", "freshwater_basin", "freshwater", "saline_ppl",
+            # Cooling technology commodities 
+            "cl_fresh", "ot_fresh", "air", "ot_saline", "cl_saline"
+        ],
+        "levels": [
+            "secondary", "primary", "final", "water_avail_basin", "water_supply_basin", 
+            "water_supply", "saline_supply", "share"
+        ],
+        "emissions": ["fresh_return", "CO2", "water_consumption"]
+    }
+
+
+@pytest.fixture
+def water_technology_lists():
+    """Define technology lists needed for water build."""
+    parent_techs = [
+        "bio_hpl", "bio_istig", "bio_istig_ccs", "bio_ppl", "coal_adv", "coal_adv_ccs",
+        "coal_ppl", "coal_ppl_u", "csp_sm1_ppl", "csp_sm3_ppl", "foil_hpl", "foil_ppl",
+        "gas_cc", "gas_cc_ccs", "gas_ct", "gas_hpl", "gas_htfc", "gas_ppl", "geo_hpl",
+        "geo_ppl", "hydro_1", "hydro_2", "hydro_3", "hydro_4", "hydro_5", "hydro_6",
+        "hydro_7", "hydro_8", "hydro_hc", "hydro_lc", "igcc", "igcc_ccs", "loil_cc",
+        "loil_ppl", "nuc_hc", "nuc_lc", "solar_res1", "solar_res2", "solar_res3",
+        "solar_res4", "solar_res5", "solar_res6", "solar_res7", "solar_res8",
+        "solar_res_hist_2000", "solar_res_hist_2005", "solar_res_hist_2010",
+        "solar_res_hist_2015", "solar_res_hist_2020", "solar_res_hist_2025",
+        "solar_resins", "wind_ref1", "wind_ref2", "wind_ref3", "wind_ref4", "wind_ref5",
+        "wind_ref_hist_2000", "wind_ref_hist_2005", "wind_ref_hist_2010",
+        "wind_ref_hist_2015", "wind_ref_hist_2020", "wind_ref_hist_2025",
+        "wind_res1", "wind_res2", "wind_res3", "wind_res4", "wind_res_hist_2000",
+        "wind_res_hist_2005", "wind_res_hist_2010", "wind_res_hist_2015",
+        "wind_res_hist_2020", "wind_res_hist_2025", "csp_sm1_res", "csp_sm1_res1",
+        "csp_sm1_res2", "csp_sm1_res3", "csp_sm1_res4", "csp_sm1_res5", "csp_sm1_res6",
+        "csp_sm1_res7", "csp_sm1_res_hist_2010", "csp_sm1_res_hist_2015",
+        "csp_sm1_res_hist_2020", "csp_sm3_res", "csp_sm3_res1", "csp_sm3_res2",
+        "csp_sm3_res3", "csp_sm3_res4", "csp_sm3_res5", "csp_sm3_res6", "csp_sm3_res7",
+        "solar_th_ppl"
+    ]
+    
+    water_techs = [
+        "return_flow", "gw_recharge", "basin_to_reg", 
+        "extract_surfacewater", "extract_groundwater", "extract_gw_fossil",
+        "extract_salinewater", "extract_salinewater_basin"
+    ]
+    
+    return {
+        "parent_techs": parent_techs,
+        "water_techs": water_techs,
+        "cooling_types": ["__cl_fresh", "__ot_fresh", "__air", "__ot_saline", "__cl_saline"]
+    }
+
+
+@pytest.fixture
 def water_build_context(water_context_regions, request):
     """Setup context for complete water build testing."""
     from message_ix_models.model.water.utils import read_config
@@ -63,7 +151,7 @@ def water_build_context(water_context_regions, request):
 
 
 @pytest.fixture
-def scenario_with_full_water_build(water_build_context, scenario_base, request):
+def scenario_with_full_water_build(water_build_context, scenario_base, water_basin_nodes, water_basic_sets, water_technology_lists, request):
     """Create scenario with complete water build applied."""
     import pandas as pd
 
@@ -102,20 +190,11 @@ def scenario_with_full_water_build(water_build_context, scenario_base, request):
     fmy = s.cat("year", "firstmodelyear")
     print(f"Retrieved firstmodelyear from scenario: {fmy}")
 
-    # Add required sets with proper naming conventions
-    commodities = ["electr", "gas", "coal", "uranium", "biomass", "oil", "lightoil", "fueloil",
-                   "surfacewater_basin", "groundwater_basin", "freshwater_basin", "freshwater", "saline_ppl"]
-    
-    # Add cooling technology commodities 
-    cooling_commodities = ["cl_fresh", "ot_fresh", "air", "ot_saline", "cl_saline"]
-    
-    all_commodities = commodities + cooling_commodities
-    for commodity in all_commodities:
+    # Add required sets using fixtures
+    for commodity in water_basic_sets["commodities"]:
         s.add_set("commodity", commodity)
         
-    levels = ["secondary", "primary", "final", "water_avail_basin", "water_supply_basin", 
-              "water_supply", "saline_supply", "share"]
-    for level in levels:
+    for level in water_basic_sets["levels"]:
         s.add_set("level", level)
     s.add_set("mode", ["M1"])
     s.add_set("time", ["year"])
@@ -130,142 +209,24 @@ def scenario_with_full_water_build(water_build_context, scenario_base, request):
     for node in nodes:
         s.add_set("node", node)
 
-    # Add basin nodes for ZMB water module
-    if context.regions == "ZMB":
-        import pandas as pd
-
-        from message_ix_models.util import package_data_path
-
-        # Read basin delineation file to get all basin nodes
-        basin_file = package_data_path(
-            "water", "delineation", f"basins_by_region_simpl_{context.regions}.csv"
-        )
-        basin_df = pd.read_csv(basin_file)
-
-        # Add basin nodes (format: B + BCU_name) and corresponding modes (format: M + BCU_name)
-        for bcu_name in basin_df["BCU_name"]:
-            basin_node = f"B{bcu_name}"
-            basin_mode = f"M{bcu_name}"
-            s.add_set("node", basin_node)
-            s.add_set("mode", basin_mode)
-            print(f"Added basin node: {basin_node}, mode: {basin_mode}")
-
-    # Add additional R12 nodes if needed
-    if context.regions == "R12":
-        # Add similar logic for R12 basin nodes if needed
-        pass
+    # Add basin nodes using fixture
+    basin_nodes, basin_modes = water_basin_nodes
+    for basin_node, basin_mode in zip(basin_nodes, basin_modes):
+        s.add_set("node", basin_node)
+        s.add_set("mode", basin_mode)
+        print(f"Added basin node: {basin_node}, mode: {basin_mode}")
     
-    # Add emission types for water emissions
-    emissions = ["fresh_return", "CO2", "water_consumption"]
-    for emission in emissions:
+    # Add emission types using fixture
+    for emission in water_basic_sets["emissions"]:
         s.add_set("emission", emission)
 
-    # Add ALL power plant technologies from water CSV data
-    parent_techs = [
-        "bio_hpl",
-        "bio_istig",
-        "bio_istig_ccs",
-        "bio_ppl",
-        "coal_adv",
-        "coal_adv_ccs",
-        "coal_ppl",
-        "coal_ppl_u",
-        "csp_sm1_ppl",
-        "csp_sm3_ppl",
-        "foil_hpl",
-        "foil_ppl",
-        "gas_cc",
-        "gas_cc_ccs",
-        "gas_ct",
-        "gas_hpl",
-        "gas_htfc",
-        "gas_ppl",
-        "geo_hpl",
-        "geo_ppl",
-        "hydro_1",
-        "hydro_2",
-        "hydro_3",
-        "hydro_4",
-        "hydro_5",
-        "hydro_6",
-        "hydro_7",
-        "hydro_8",
-        "hydro_hc",
-        "hydro_lc",
-        "igcc",
-        "igcc_ccs",
-        "loil_cc",
-        "loil_ppl",
-        "nuc_hc",
-        "nuc_lc",
-        "solar_res1",
-        "solar_res2",
-        "solar_res3",
-        "solar_res4",
-        "solar_res5",
-        "solar_res6",
-        "solar_res7",
-        "solar_res8",
-        "solar_res_hist_2000",
-        "solar_res_hist_2005",
-        "solar_res_hist_2010",
-        "solar_res_hist_2015",
-        "solar_res_hist_2020",
-        "solar_res_hist_2025",
-        "solar_resins",
-        "wind_ref1",
-        "wind_ref2",
-        "wind_ref3",
-        "wind_ref4",
-        "wind_ref5",
-        "wind_ref_hist_2000",
-        "wind_ref_hist_2005",
-        "wind_ref_hist_2010",
-        "wind_ref_hist_2015",
-        "wind_ref_hist_2020",
-        "wind_ref_hist_2025",
-        "wind_res1",
-        "wind_res2",
-        "wind_res3",
-        "wind_res4",
-        "wind_res_hist_2000",
-        "wind_res_hist_2005",
-        "wind_res_hist_2010",
-        "wind_res_hist_2015",
-        "wind_res_hist_2020",
-        "wind_res_hist_2025",
-        # Add ALL CSP resource technologies (base + numbered variants + historical)
-        "csp_sm1_res",
-        "csp_sm1_res1",
-        "csp_sm1_res2",
-        "csp_sm1_res3",
-        "csp_sm1_res4",
-        "csp_sm1_res5",
-        "csp_sm1_res6",
-        "csp_sm1_res7",
-        "csp_sm1_res_hist_2010",
-        "csp_sm1_res_hist_2015",
-        "csp_sm1_res_hist_2020",
-        "csp_sm3_res",
-        "csp_sm3_res1",
-        "csp_sm3_res2",
-        "csp_sm3_res3",
-        "csp_sm3_res4",
-        "csp_sm3_res5",
-        "csp_sm3_res6",
-        "csp_sm3_res7",
-        "solar_th_ppl",
-    ]
+    # Add technologies using fixture
+    parent_techs = water_technology_lists["parent_techs"]
     for tech in parent_techs:
         s.add_set("technology", tech)
     
-    # Add water-specific technologies that are referenced in water_supply data
-    water_techs = [
-        "return_flow", "gw_recharge", "basin_to_reg", 
-        "extract_surfacewater", "extract_groundwater", "extract_gw_fossil",
-        "extract_salinewater", "extract_salinewater_basin"
-    ]
-    for tech in water_techs:
+    # Add water-specific technologies
+    for tech in water_technology_lists["water_techs"]:
         s.add_set("technology", tech)
         print(f"Added water technology: {tech}")
 
@@ -379,11 +340,9 @@ def scenario_with_full_water_build(water_build_context, scenario_base, request):
         print("Adding cooling technologies to scenario...")
         s.check_out()
         
-        # Generate cooling technology names from parent technologies and cooling types
-        cooling_types = ["__cl_fresh", "__ot_fresh", "__air", "__ot_saline", "__cl_saline"]
-        
+        # Generate cooling technology names using fixtures
         for parent_tech in parent_techs:
-            for cooling_type in cooling_types:
+            for cooling_type in water_technology_lists["cooling_types"]:
                 cooling_tech = f"{parent_tech}{cooling_type}"
                 s.add_set("technology", cooling_tech)
                 print(f"Added cooling technology: {cooling_tech}")
