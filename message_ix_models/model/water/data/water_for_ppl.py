@@ -335,7 +335,7 @@ def _compose_capacity_factor(inp: pd.DataFrame, context: "Context") -> pd.DataFr
 
 # water & electricity for cooling technologies
 @minimum_version("message_ix 3.7")
-def cool_tech(context: "Context") -> dict[str, pd.DataFrame]:
+def cool_tech(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     """Process cooling technology data for a scenario instance.
     The input values of parent technologies are read in from a scenario instance and
     then cooling fractions are calculated by using the data from
@@ -402,7 +402,7 @@ def cool_tech(context: "Context") -> dict[str, pd.DataFrame]:
         .drop(columns=1)
     )
 
-    scen = context.get_scenario()
+    scen = scenario if scenario is not None else context.get_scenario()
 
     # Extracting input database from scenario for parent technologies
     ref_input = scen.par("input", {"technology": cooling_df["parent_tech"]})
@@ -845,8 +845,16 @@ def cool_tech(context: "Context") -> dict[str, pd.DataFrame]:
 
     # Set config for cost projections
     # Using GDP method for cost projections
+    # Map country regions to their parent R12 regions for cost projections
+    cost_region = context.regions
+    if context.regions == "ZMB":
+        cost_region = "R12"  # Use R12 global data for ZMB (crude approximation)
+    elif context.type_reg == "country" and context.regions not in {"R11", "R12", "R20"}:
+        # For other country regions, default to R12 global
+        cost_region = "R12"
+    
     cfg = Config(
-        module="cooling", scenario=context.ssp, method="gdp", node=context.regions
+        module="cooling", scenario=context.ssp, method="gdp", node=cost_region
     )
 
     # Get projected investment and fixed o&m costs

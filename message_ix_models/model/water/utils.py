@@ -4,7 +4,6 @@ from functools import lru_cache
 from itertools import product
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 import xarray as xr
 from sdmx.model.v21 import Code
@@ -124,63 +123,42 @@ def add_commodity_and_level(df: pd.DataFrame, default_level=None):
     return df.apply(func, axis=1)
 
 
-def map_yv_ya_lt(
-    periods: tuple[int, ...], lt: int, ya: Optional[int] = None
-) -> pd.DataFrame:
-    """Generate proper vintage-activity year combinations for MESSAGEix.
-
-    This function creates vintage-activity year combinations that follow MESSAGEix
-    conventions and avoid problematic historical vintages being active in model periods.
+def map_yv_ya_lt(scenario, node: str, technology: str) -> pd.DataFrame:
+    """Wrapper for scenario.vintage_and_active_years() with fallback.
 
     Parameters
     ----------
-    periods : tuple[int, ...]
-        A sequence of years including both historical and model years.
-    lt : int, lifetime
-        Technology lifetime in years.
-    ya : int, optional
-        The first model year (firstmodelyear). If not provided, uses first period.
+    scenario : message_ix.Scenario
+        The MESSAGEix scenario object.
+    node : str
+        Node name.
+    technology : str
+        Technology name for which to generate vintage-activity combinations.
 
     Returns
     -------
     pd.DataFrame
-        A DataFrame with columns 'year_vtg' and 'year_act' containing only
-        valid combinations that respect MESSAGEix conventions.
+        A DataFrame with columns 'year_vtg' and 'year_act' from MESSAGEix.
     """
-    if not ya:
-        ya = periods[0]
-        log.info(f"First model year set as {ya!r}")
-    if not lt:
-        raise ValueError("Add a fixed lifetime parameter 'lt'")
+    try:
+        yv_ya = scenario.vintage_and_active_years((node, technology))
 
-    # Separate historical and model years
-    model_years = [y for y in periods if y >= ya]
-    historical_years = [y for y in periods if y < ya]
+        # The MESSAGEix method returns a DataFrame directly
+        if not yv_ya.empty:
+            return yv_ya
+    except (ValueError, KeyError):
+        # No technical lifetime data available for this technology/node combination
+        pass
 
-    combinations = []
+    # Fallback: create minimal valid combinations using only model years
+    model_years = [y for y in scenario.set("year") if y >= scenario.firstmodelyear]
 
-    # Rule 1: Model year vintages can be active in current and future model years
-    for vtg_year in model_years:
-        for act_year in model_years:
-            if act_year >= vtg_year and act_year - vtg_year <= lt:
-                combinations.append({"year_vtg": vtg_year, "year_act": act_year})
-
-    # Rule 2:
-    # Allow historical vintages in model years only if they're still within lifetime
-    # This preserves existing capacity from before the model horizon
-    if historical_years and model_years:
-        for vtg_year in historical_years:
-            for act_year in model_years:
-                if act_year >= vtg_year and act_year - vtg_year <= lt:
-                    combinations.append({"year_vtg": vtg_year, "year_act": act_year})
-
-    df = pd.DataFrame(combinations, dtype=np.int64)
-
-    # Ensure we have the right columns even if empty
-    if df.empty:
-        df = pd.DataFrame(columns=["year_vtg", "year_act"], dtype=np.int64)
-
-    # Sort for consistency
-    df = df.sort_values(["year_vtg", "year_act"]).reset_index(drop=True)
-
-    return df
+    if model_years:
+        # Simple approach: each year is both vintage and active
+        data = []
+        for year in model_years:
+            data.append({"year_vtg": year, "year_act": year})
+        return pd.DataFrame(data)
+    else:
+        # Return empty DataFrame with correct columns if no valid years
+        return pd.DataFrame(columns=["year_vtg", "year_act"])

@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 from message_ix import Scenario
 
@@ -42,22 +43,37 @@ def scenario_base(request):
     }
 
 
+@pytest.fixture
+def scenario_with_context(water_context_regions, scenario_base, request):
+    """Create a properly set up scenario with context for testing."""
+    mp = water_context_regions.get_platform()
+    s = Scenario(mp=mp, **scenario_base)
+    s.add_horizon(year=[2020, 2030, 2040])
+    s.add_set("technology", ["tech1", "tech2"])
+    s.add_set("year", [2020, 2030, 2040])
+    s.commit(comment=f"test setup for {request.node.name}")
+
+    water_context_regions.set_scenario(s)
+    water_context_regions["water build info"] = ScenarioInfo(s)
+
+    return water_context_regions, s
+
+
 @pytest.mark.parametrize("SDG", ["baseline", "not_baseline"])
-def test_add_infrastructure_techs(water_context_regions, scenario_base, SDG, request):
+def test_add_infrastructure_techs(scenario_with_context, SDG, request):
     """Test infrastructure techs data generation."""
-    water_context_regions.SDG = SDG
+    context, s = scenario_with_context
+    context.SDG = SDG
 
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2020, 2030, 2040])
-    s.add_set("technology", ["tech1", "tech2"])
-    s.add_set("year", [2020, 2030, 2040])
-    s.commit(comment="test infrastructure techs")
+    result = add_infrastructure_techs(context=context)
 
-    water_context_regions.set_scenario(s)
-    water_context_regions["water build info"] = ScenarioInfo(s)
+    technology_name = "urban_t_d"
 
-    result = add_infrastructure_techs(context=water_context_regions)
+    input = s.par("input", {"technology": technology_name})
+    output = s.par("output", {"technology": technology_name})
+
+    print(input)
+    print(output)
 
     assert isinstance(result, dict)
     assert "input" in result and "output" in result
@@ -95,21 +111,12 @@ def test_add_infrastructure_techs(water_context_regions, scenario_base, SDG, req
     assert all(col in result["output"].columns for col in expected_output_cols)
 
 
-def test_add_desalination(water_context_regions, scenario_base, request):
+def test_add_desalination(scenario_with_context, request):
     """Test desalination data generation."""
-    water_context_regions.type_reg = "global"
+    context, s = scenario_with_context
+    context.type_reg = "global"
 
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2020, 2030, 2040])
-    s.add_set("technology", ["tech1", "tech2"])
-    s.add_set("year", [2020, 2030, 2040])
-    s.commit(comment="test desalination")
-
-    water_context_regions.set_scenario(s)
-    water_context_regions["water build info"] = ScenarioInfo(s)
-
-    result = add_desalination(context=water_context_regions)
+    result = add_desalination(context=context)
 
     assert isinstance(result, dict)
     assert "input" in result and "output" in result
@@ -147,67 +154,66 @@ def test_add_desalination(water_context_regions, scenario_base, request):
     assert all(col in result["output"].columns for col in expected_output_cols)
 
 
-@pytest.mark.parametrize(
-    "periods,lifetime,first_year",
-    [
-        ((2010, 2020, 2030, 2040), 20, 2020),
-        ((2020, 2030, 2040), 20, 2020),
-    ],
-)
-def test_map_yv_ya_lt_excessive_combinations(periods, lifetime, first_year):
-    """Document that old map_yv_ya_lt generates
-    excessive vintage-activity combinations."""
-    result = map_yv_ya_lt(periods, lifetime, first_year)
-    model_years = [y for y in periods if y >= first_year]
-    proper_combinations = len(model_years)
+def test_map_yv_ya_lt_fixed_wrapper(scenario_with_context, request):
+    """Test that map_yv_ya_lt now properly wraps scenario.vintage_and_active_years()."""
 
-    # This test documents the PROBLEM with the old function
-    # It should fail to show the issue exists
-    try:
-        assert len(result) <= proper_combinations, (
-            f"ISSUE: Excessive combinations ({len(result)}) vs proper "
-            f"MESSAGEix ({proper_combinations})"
-        )
-        # If this passes, there's no issue (shouldn't happen)
-        pytest.fail("Expected excessive combinations but didn't find them")
-    except AssertionError as e:
-        # This is expected - the old function generates excessive combinations
-        assert "ISSUE: Excessive combinations" in str(e)
+    context, s = scenario_with_context
 
-    # Check for historical vintages in model periods - this should also fail
-    historical_years = [y for y in periods if y < first_year]
-    if historical_years:
-        historical_in_model = result[
-            result["year_vtg"].isin(historical_years)
-            & result["year_act"].isin([y for y in periods if y >= first_year])
-        ]
-        # This documents the issue - historical vintages in model periods
-        if not historical_in_model.empty:
-            # This is the problem we're documenting
-            pass
-
-    assert list(result.columns) == ["year_vtg", "year_act"]
-    assert all(result["year_vtg"] <= result["year_act"])
-    assert all(result["year_act"] >= first_year)
-    assert all(result["year_act"] - result["year_vtg"] <= lifetime)
-
-
-def test_get_vintage_and_active_years_fixed(
-    water_context_regions, scenario_base, request
-):
-    """Test that new get_vintage_and_active_years generates proper combinations."""
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2010, 2020, 2030, 2040])
-    s.add_set("technology", ["test_tech"])
-    s.add_set("year", [2010, 2020, 2030, 2040])
-    s.commit(comment="test vintage-activity years")
-
-    # Add a simple technology for testing
+    # Modify scenario for this specific test - add historical year and specific tech
     s.check_out()
+
+    # Test the refactored map_yv_ya_lt function
+    result = map_yv_ya_lt(s, "test_node", "extract_surfacewater")
+    print("\n=== REFACTORED map_yv_ya_lt RESULTS ===")
+    print(f"Generated {len(result)} combinations:")
+    print(result)
+    print(f"Scenario firstmodelyear: {s.firstmodelyear}")
+
+    # Should return proper DataFrame
+    assert isinstance(result, pd.DataFrame)
+    assert "year_vtg" in result.columns
+    assert "year_act" in result.columns
+
+    # Test the key fix: should NOT have historical vintages in model periods
+    if not result.empty:
+        # Should not have historical vintages (2010) active in model periods (2020+)
+        historical_in_model = result[
+            (result["year_vtg"] < s.firstmodelyear)
+            & (result["year_act"] >= s.firstmodelyear)
+        ]
+        assert historical_in_model.empty, (
+            f"FIXED: Should not have historical vintages in model periods, "
+            f"but found {len(historical_in_model)} combinations: {historical_in_model}"
+        )
+
+        # Basic MESSAGEix validity checks
+        assert all(result["year_vtg"] <= result["year_act"])
+        assert all(result["year_act"] >= s.firstmodelyear)
+
+    # Test fallback behavior when technology doesn't have technical_lifetime
+    result_fallback = map_yv_ya_lt(s, "test_node", "nonexistent_tech")
+    assert isinstance(result_fallback, pd.DataFrame)
+    assert "year_vtg" in result_fallback.columns
+    assert "year_act" in result_fallback.columns
+
+    # Fallback should create minimal model-year-only combinations
+    if not result_fallback.empty:
+        model_years = [y for y in s.set("year") if y >= s.firstmodelyear]
+        assert all(vtg in model_years for vtg in result_fallback.year_vtg.unique())
+        assert all(result_fallback.year_vtg <= result_fallback.year_act)
+
+
+def test_get_vintage_and_active_years_fixed(scenario_with_context, request):
+    """Test that new get_vintage_and_active_years generates proper combinations."""
+    context, s = scenario_with_context
+
+    # Modify scenario for this specific test
+    s.check_out()
+    s.add_set("year", [2010])  # Add historical year
+    s.add_set("technology", ["test_tech"])
     s.add_set("node", ["test_node"])
     s.add_par("technical_lifetime", ["test_node", "test_tech", 2020], 20, "y")
-    s.commit(comment="add tech lifetime")
+    s.commit(comment="add tech lifetime for test")
 
     # Test our fixed function
     result = get_vintage_and_active_years(s, "test_node", "test_tech")
@@ -237,19 +243,20 @@ def test_get_vintage_and_active_years_fixed(
         assert all(result["year_act"] >= s.firstmodelyear)
 
 
-def test_vintage_activity_year_issues(water_context_regions, scenario_base, request):
+def test_vintage_activity_year_issues(scenario_with_context, request):
     """Document infrastructure functions generate problematic year combinations."""
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2010, 2020, 2030, 2040])
-    s.add_set("technology", ["tech1", "tech2"])
-    s.add_set("year", [2010, 2020, 2030, 2040])
-    s.commit(comment="test with historical years")
+    context, s = scenario_with_context
 
-    water_context_regions.set_scenario(s)
-    water_context_regions["water build info"] = ScenarioInfo(s)
+    # Add historical year for this test
+    s.check_out()
+    s.add_set("year", [2010])
+    s.commit(comment="add historical year for test")
 
-    result = add_infrastructure_techs(context=water_context_regions)
+    # Update context scenario
+    context.set_scenario(s)
+    context["water build info"] = ScenarioInfo(s)
+
+    result = add_infrastructure_techs(context=context)
 
     if "input" in result and not result["input"].empty:
         year_combos = (
@@ -268,21 +275,11 @@ def test_vintage_activity_year_issues(water_context_regions, scenario_base, requ
             pass  # Issue documented
 
 
-def test_uncontrolled_broadcasting_to_all_basins(
-    water_context_regions, scenario_base, request
-):
+def test_uncontrolled_broadcasting_to_all_basins(scenario_with_context, request):
     """Verify technologies are not broadcast to ALL basins without filtering."""
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2020, 2030, 2040])
-    s.add_set("technology", ["tech1", "tech2"])
-    s.add_set("year", [2020, 2030, 2040])
-    s.commit(comment="test broadcasting")
+    context, s = scenario_with_context
 
-    water_context_regions.set_scenario(s)
-    water_context_regions["water build info"] = ScenarioInfo(s)
-
-    result = add_infrastructure_techs(context=water_context_regions)
+    result = add_infrastructure_techs(context=context)
 
     if "input" in result and not result["input"].empty:
         unique_basins = result["input"]["node_loc"].nunique()
@@ -313,23 +310,12 @@ def test_uncontrolled_broadcasting_to_all_basins(
         )
 
 
-def test_missing_technology_basin_filtering(
-    water_context_regions, scenario_base, request
-):
+def test_missing_technology_basin_filtering(scenario_with_context, request):
     """Document inappropriate technology-basin combinations."""
-    water_context_regions.type_reg = "global"
+    context, s = scenario_with_context
+    context.type_reg = "global"
 
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2020, 2030, 2040])
-    s.add_set("technology", ["tech1", "tech2"])
-    s.add_set("year", [2020, 2030, 2040])
-    s.commit(comment="test filtering")
-
-    water_context_regions.set_scenario(s)
-    water_context_regions["water build info"] = ScenarioInfo(s)
-
-    result = add_desalination(context=water_context_regions)
+    result = add_desalination(context=context)
 
     if "input" in result and not result["input"].empty:
         total_combinations = len(
@@ -357,19 +343,11 @@ def test_missing_technology_basin_filtering(
         )
 
 
-def test_redundant_data_generation(water_context_regions, scenario_base, request):
+def test_redundant_data_generation(scenario_with_context, request):
     """Document redundant/duplicate data generation patterns."""
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2020, 2030, 2040])
-    s.add_set("technology", ["tech1", "tech2"])
-    s.add_set("year", [2020, 2030, 2040])
-    s.commit(comment="test redundancy")
+    context, s = scenario_with_context
 
-    water_context_regions.set_scenario(s)
-    water_context_regions["water build info"] = ScenarioInfo(s)
-
-    result = add_infrastructure_techs(context=water_context_regions)
+    result = add_infrastructure_techs(context=context)
 
     if "input" in result and not result["input"].empty:
         duplicate_rows = result["input"].duplicated().sum()
@@ -396,14 +374,16 @@ def test_redundant_data_generation(water_context_regions, scenario_base, request
             )
 
 
-def test_basin_region_mapping(water_context_regions, scenario_base, request):
+def test_basin_region_mapping(scenario_with_context, request):
     """Verify basin-to-region mapping is correct with no overlaps."""
     import pandas as pd
 
     from message_ix_models.util import package_data_path
 
+    context, s = scenario_with_context
+
     # Only test for R12 regions
-    if water_context_regions.regions != "R12":
+    if context.regions != "R12":
         return
 
     # Load basin data
@@ -442,18 +422,7 @@ def test_basin_region_mapping(water_context_regions, scenario_base, request):
     # Check total combinations
     total_basins = len(r12_basins)
 
-    # Run infrastructure test and check combinations
-    mp = water_context_regions.get_platform()
-    s = Scenario(mp=mp, **scenario_base)
-    s.add_horizon(year=[2020, 2030, 2040])
-    s.add_set("technology", ["tech1", "tech2"])
-    s.add_set("year", [2020, 2030, 2040])
-    s.commit(comment="test basin mapping")
-
-    water_context_regions.set_scenario(s)
-    water_context_regions["water build info"] = ScenarioInfo(s)
-
-    result = add_infrastructure_techs(context=water_context_regions)
+    result = add_infrastructure_techs(context=context)
 
     if "input" in result and not result["input"].empty:
         # Count unique basin-region combinations in result

@@ -547,14 +547,6 @@ def get_vintage_and_active_years(
         pass
 
     # Fallback: create minimal valid combinations using only model years
-    model_years = [y for y in scenario.set("year") if y >= scenario.firstmodelyear]
-
-    if model_years:
-        # Simple approach: each year is both vintage and active
-        data = []
-        for year in model_years:
-            data.append({"year_vtg": year, "year_act": year})
-        return pd.DataFrame(data)
     else:
         # Return empty DataFrame with correct columns if no valid years
         return pd.DataFrame(columns=["year_vtg", "year_act"])
