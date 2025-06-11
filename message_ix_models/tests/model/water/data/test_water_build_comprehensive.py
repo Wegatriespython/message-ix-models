@@ -66,8 +66,21 @@ def water_basin_nodes(water_context_regions):
             basin_modes.append(basin_mode)
     
     elif context.regions == "R12":
-        # Add R12 basin logic if needed
-        pass
+        import pandas as pd
+        from message_ix_models.util import package_data_path
+
+        # Read basin delineation file to get all basin nodes for R12
+        basin_file = package_data_path(
+            "water", "delineation", f"basins_by_region_simpl_{context.regions}.csv"
+        )
+        basin_df = pd.read_csv(basin_file)
+
+        # Generate basin nodes (format: B + BCU_name) and corresponding modes (format: M + BCU_name)
+        for bcu_name in basin_df["BCU_name"]:
+            basin_node = f"B{bcu_name}"
+            basin_mode = f"M{bcu_name}"
+            basin_nodes.append(basin_node)
+            basin_modes.append(basin_mode)
     
     return basin_nodes, basin_modes
 
