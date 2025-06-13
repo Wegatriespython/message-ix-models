@@ -714,6 +714,18 @@ def add_infrastructure_techs(context: "Context", scenario=None) -> dict[str, pd.
     scen = scenario if scenario is not None else context.get_scenario()
     results = {}
 
+    # Step 1.5: Process technical lifetime FIRST and add to scenario
+    lifetime_results = _process_technical_lifetime_parameters(
+        df, df_node, context, year_wat
+    )
+    results.update(lifetime_results)
+    
+    # Add technical_lifetime to scenario immediately so vintage_and_active_years works
+    if "technical_lifetime" in results and not results["technical_lifetime"].empty:
+        from message_ix_models.util import add_par_data
+        with scen.transact("Add technical lifetimes for infrastructure"):
+            add_par_data(scen, {"technical_lifetime": results["technical_lifetime"]})
+
     # Step 2: Prepare data splits and process input parameters
     df_non_elec = df[df["incmd"] != "electr"].reset_index()
     df_dist = df_non_elec[df_non_elec["tec"].isin(DISTRIBUTION_TECHNOLOGIES)]
@@ -732,11 +744,7 @@ def add_infrastructure_techs(context: "Context", scenario=None) -> dict[str, pd.
         df, df_node, context, scen, sub_time
     )
 
-    # Step 5: Process technical lifetime and construction time
-    lifetime_results = _process_technical_lifetime_parameters(
-        df, df_node, context, year_wat
-    )
-    results.update(lifetime_results)
+    # Step 5: Technical lifetime already processed in Step 1.5
 
     # Step 6: Process cost parameters
     cost_results = _process_cost_parameters(
