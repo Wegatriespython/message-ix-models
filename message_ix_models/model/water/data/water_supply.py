@@ -6,7 +6,7 @@ from message_ix import Scenario, make_df
 
 from message_ix_models import Context
 from message_ix_models.model.water.data.demands import read_water_availability
-from message_ix_models.model.water.utils import map_yv_ya_lt
+from message_ix_models.model.water.utils import get_vintage_and_active_years
 from message_ix_models.util import (
     broadcast,
     minimum_version,
@@ -350,8 +350,8 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
         # ])
 
         # input data frame  for freshwater supply
-        # Use first basin node for vintage-activity year mapping
-        yv_ya_sw = map_yv_ya_lt(scen, df_node["node"].iloc[0], "extract_surfacewater")
+        # Use info.yv_ya with technical lifetime for surface water extraction (50 years)
+        yv_ya_sw = get_vintage_and_active_years(info, "extract_surfacewater", 50)
 
         inp = pd.concat(
             [
@@ -377,8 +377,8 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
         )
 
         # input dataframe  for groundwater supply
-        # Use first basin node for vintage-activity year mapping
-        yv_ya_gw = map_yv_ya_lt(scen, df_node["node"].iloc[0], "extract_groundwater")
+        # Use info.yv_ya with technical lifetime for groundwater extraction (20 years)
+        yv_ya_gw = get_vintage_and_active_years(info, "extract_groundwater", 20)
         inp = pd.concat(
             [
                 inp,

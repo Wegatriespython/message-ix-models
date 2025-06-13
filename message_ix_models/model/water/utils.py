@@ -123,42 +123,60 @@ def add_commodity_and_level(df: pd.DataFrame, default_level=None):
     return df.apply(func, axis=1)
 
 
-def map_yv_ya_lt(scenario, node: str, technology: str) -> pd.DataFrame:
-    """Wrapper for scenario.vintage_and_active_years() with fallback.
+def get_vintage_and_active_years(
+    info, technology: str, technical_lifetime: int = None
+) -> pd.DataFrame:
+    """Calculate valid vintage-activity year combinations without scenario dependency.
+
+    This implements the same logic as scenario.vintage_and_active_years() but
+    uses the technical lifetime data directly instead of requiring it to be in
+    the scenario first.
 
     Parameters
     ----------
-    scenario : message_ix.Scenario
-        The MESSAGEix scenario object.
-    node : str
-        Node name.
+    info : ScenarioInfo
+        Contains the base yv_ya combinations
     technology : str
-        Technology name for which to generate vintage-activity combinations.
+        Technology name (for cache key)
+    technical_lifetime : int, optional
+        Technical lifetime in years. If None, returns all combinations.
 
     Returns
     -------
     pd.DataFrame
-        A DataFrame with columns 'year_vtg' and 'year_act' from MESSAGEix.
+        DataFrame with columns ['year_vtg', 'year_act'] containing valid combinations
     """
+    # Get base yv_ya from ScenarioInfo property
+    yv_ya = info.yv_ya
+
+    # If no technical lifetime specified or is nan, return all combinations
+    if technical_lifetime is None or pd.isna(technical_lifetime):
+        technical_lifetime = 1
+
+    # Filter to only valid combinations based on technical lifetime
+    # A technology can only be active for technical_lifetime years after vintage
+    valid_mask = yv_ya["year_act"] <= yv_ya["year_vtg"] + technical_lifetime
+
+    return yv_ya[valid_mask].reset_index(drop=True)
+
+
+# Legacy function for backwards compatibility - replace calls with get_vintage_and_active_years()
+def map_yv_ya_lt(scenario, node: str, technology: str) -> pd.DataFrame:
+    """Legacy wrapper - use get_vintage_and_active_years() instead."""
+    # This is the old problematic function - should be replaced
     try:
         yv_ya = scenario.vintage_and_active_years((node, technology))
-
-        # The MESSAGEix method returns a DataFrame directly
         if not yv_ya.empty:
             return yv_ya
     except (ValueError, KeyError):
-        # No technical lifetime data available for this technology/node combination
         pass
 
-    # Fallback: create minimal valid combinations using only model years
+    # Fallback
     model_years = [y for y in scenario.set("year") if y >= scenario.firstmodelyear]
-
     if model_years:
-        # Simple approach: each year is both vintage and active
         data = []
         for year in model_years:
             data.append({"year_vtg": year, "year_act": year})
         return pd.DataFrame(data)
     else:
-        # Return empty DataFrame with correct columns if no valid years
         return pd.DataFrame(columns=["year_vtg", "year_act"])

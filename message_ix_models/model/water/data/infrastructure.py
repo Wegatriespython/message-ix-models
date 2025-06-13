@@ -16,6 +16,7 @@ from message_ix_models.util import (
     same_node,
     same_time,
 )
+from message_ix_models.model.water.utils import get_vintage_and_active_years
 
 if TYPE_CHECKING:
     from message_ix_models import Context
@@ -160,6 +161,7 @@ def _process_input_parameters(
         df_dist=df_dist,
         scenario=scenario,
         sub_time=sub_time,
+        context=context,
     )
 
     # Process electric inputs
@@ -225,9 +227,10 @@ def _process_output_parameters(
         relevant_basins = filter_basins_for_technology(row["tec"], df_node, context)
 
         if len(relevant_basins) > 0:
-            # Get vintage-activity years
-            first_basin = relevant_basins.iloc[0]["node"]
-            yv_ya = get_vintage_and_active_years(scenario, first_basin, row["tec"])
+            # Get vintage-activity years using info and technical lifetime
+            info = context["water build info"]
+            technical_lifetime = row.get("technical_lifetime_mid", None)
+            yv_ya = get_vintage_and_active_years(info, row["tec"], technical_lifetime)
 
             out_df = (
                 make_df(
@@ -257,8 +260,9 @@ def _process_output_parameters(
         relevant_basins = filter_basins_for_technology(row["tec"], df_node, context)
 
         if len(relevant_basins) > 0:
-            first_basin = relevant_basins.iloc[0]["node"]
-            yv_ya = get_vintage_and_active_years(scenario, first_basin, row["tec"])
+            info = context["water build info"]
+            technical_lifetime = row.get("technical_lifetime_mid", None)
+            yv_ya = get_vintage_and_active_years(info, row["tec"], technical_lifetime)
 
             out_df = (
                 make_df(
@@ -333,8 +337,9 @@ def _process_fixed_costs(
         relevant_basins = filter_basins_for_technology(row["tec"], df_node, context)
 
         if len(relevant_basins) > 0:
-            first_basin = relevant_basins.iloc[0]["node"]
-            yv_ya = get_vintage_and_active_years(scenario, first_basin, row["tec"])
+            info = context["water build info"]
+            technical_lifetime = row.get("technical_lifetime_mid", None)
+            yv_ya = get_vintage_and_active_years(info, row["tec"], technical_lifetime)
 
             fix_cost = make_df(
                 "fix_cost",
@@ -366,8 +371,9 @@ def _process_variable_costs(
         relevant_basins = filter_basins_for_technology(row["tec"], df_node, context)
 
         if len(relevant_basins) > 0:
-            first_basin = relevant_basins.iloc[0]["node"]
-            yv_ya = get_vintage_and_active_years(scenario, first_basin, row["tec"])
+            info = context["water build info"]
+            technical_lifetime = row.get("technical_lifetime_mid", None)
+            yv_ya = get_vintage_and_active_years(info, row["tec"], technical_lifetime)
 
             # Determine value column and mode based on technology type and SDG scenario
             if row["tec"] in DISTRIBUTION_TECHNOLOGIES:
@@ -437,8 +443,9 @@ def _process_capacity_factor_parameters(
         relevant_basins = filter_basins_for_technology(row["tec"], df_node, context)
 
         if len(relevant_basins) > 0:
-            first_basin = relevant_basins.iloc[0]["node"]
-            yv_ya = get_vintage_and_active_years(scenario, first_basin, row["tec"])
+            info = context["water build info"]
+            technical_lifetime = row.get("technical_lifetime_mid", None)
+            yv_ya = get_vintage_and_active_years(info, row["tec"], technical_lifetime)
 
             cap_df = (
                 make_df(
@@ -526,30 +533,6 @@ def _process_cost_parameters(
     return results
 
 
-# Cache for vintage and active years to avoid repeated computation
-@lru_cache(maxsize=256)
-def get_vintage_and_active_years(
-    scenario: Scenario, node_loc: str, technology: str
-) -> pd.DataFrame:
-    """Get vintage and active years using standard MESSAGEix approach.
-
-    This replaces the problematic map_yv_ya_lt function that was generating
-    excessive combinations and allowing historical vintages in model periods.
-    """
-    try:
-        yv_ya = scenario.vintage_and_active_years((node_loc, technology))
-
-        # The MESSAGEix method returns a DataFrame directly
-        if not yv_ya.empty:
-            return yv_ya
-    except (ValueError, KeyError):
-        # No technical lifetime data available for this technology/node combination
-        pass
-
-    # Fallback: create minimal valid combinations using only model years
-    else:
-        # Return empty DataFrame with correct columns if no valid years
-        return pd.DataFrame(columns=["year_vtg", "year_act"])
 
 
 def filter_basins_for_technology(
@@ -602,7 +585,7 @@ def filter_basins_for_technology(
 def create_input_data_for_technology(
     technology_row: pd.Series,
     relevant_basins: pd.DataFrame,
-    scenario: Scenario,
+    context: "Context",
     sub_time: str,
     mode: str = "M1",
 ) -> pd.DataFrame:
@@ -613,10 +596,9 @@ def create_input_data_for_technology(
     """
     # Get vintage-activity years for first basin (they should be same for all)
     if len(relevant_basins) > 0:
-        first_basin = relevant_basins.iloc[0]["node"]
-        yv_ya = get_vintage_and_active_years(
-            scenario, first_basin, technology_row["tec"]
-        )
+        info = context["water build info"]
+        technical_lifetime = technology_row.get("technical_lifetime_mid", None)
+        yv_ya = get_vintage_and_active_years(info, technology_row["tec"], technical_lifetime)
     else:
         return pd.DataFrame()
 
@@ -648,6 +630,7 @@ def start_creating_input_dataframe(
     df_dist: pd.DataFrame,
     scenario: Scenario,
     sub_time,
+    context: "Context",
 ) -> pd.DataFrame:
     """Creates an input pd.DataFrame with proper basin filtering."""
     inp_dfs = []
@@ -656,12 +639,12 @@ def start_creating_input_dataframe(
     for _, row in df_non_elec.iterrows():
         # Filter basins for this technology
         relevant_basins = filter_basins_for_technology(
-            row["tec"], df_node, scenario.platform
+            row["tec"], df_node, context
         )
 
         if len(relevant_basins) > 0:
             inp_df = create_input_data_for_technology(
-                row, relevant_basins, scenario, sub_time
+                row, relevant_basins, context, sub_time
             )
             inp_dfs.append(inp_df)
 
@@ -675,12 +658,12 @@ def start_creating_input_dataframe(
         row_copy["value_mid"] = row[value_col]
 
         relevant_basins = filter_basins_for_technology(
-            row["tec"], df_node, scenario.platform
+            row["tec"], df_node, context
         )
 
         if len(relevant_basins) > 0:
             inp_df = create_input_data_for_technology(
-                row_copy, relevant_basins, scenario, sub_time, mode=mode
+                row_copy, relevant_basins, context, sub_time, mode=mode
             )
             inp_dfs.append(inp_df)
 
@@ -714,18 +697,6 @@ def add_infrastructure_techs(context: "Context", scenario=None) -> dict[str, pd.
     scen = scenario if scenario is not None else context.get_scenario()
     results = {}
 
-    # Step 1.5: Process technical lifetime FIRST and add to scenario
-    lifetime_results = _process_technical_lifetime_parameters(
-        df, df_node, context, year_wat
-    )
-    results.update(lifetime_results)
-    
-    # Add technical_lifetime to scenario immediately so vintage_and_active_years works
-    if "technical_lifetime" in results and not results["technical_lifetime"].empty:
-        from message_ix_models.util import add_par_data
-        with scen.transact("Add technical lifetimes for infrastructure"):
-            add_par_data(scen, {"technical_lifetime": results["technical_lifetime"]})
-
     # Step 2: Prepare data splits and process input parameters
     df_non_elec = df[df["incmd"] != "electr"].reset_index()
     df_dist = df_non_elec[df_non_elec["tec"].isin(DISTRIBUTION_TECHNOLOGIES)]
@@ -744,7 +715,11 @@ def add_infrastructure_techs(context: "Context", scenario=None) -> dict[str, pd.
         df, df_node, context, scen, sub_time
     )
 
-    # Step 5: Technical lifetime already processed in Step 1.5
+    # Step 5: Process technical lifetime and construction time
+    lifetime_results = _process_technical_lifetime_parameters(
+        df, df_node, context, year_wat
+    )
+    results.update(lifetime_results)
 
     # Step 6: Process cost parameters
     cost_results = _process_cost_parameters(
@@ -774,8 +749,9 @@ def prepare_input_dataframe(
             continue
 
         # Get vintage-activity years
-        first_basin = relevant_basins.iloc[0]["node"]
-        yv_ya = get_vintage_and_active_years(scenario, first_basin, row["tec"])
+        info = context["water build info"]
+        technical_lifetime = row.get("technical_lifetime_mid", None)
+        yv_ya = get_vintage_and_active_years(info, row["tec"], technical_lifetime)
 
         if row["tec"] in techs:
             # Distribution technologies
@@ -873,16 +849,14 @@ def _process_desalination_setup_and_data_loading(
 
 def _process_saline_water_extraction(
     desal_basins: pd.DataFrame,
-    scenario: "Scenario",
+    context: "Context",
     sub_time: list,
     year_wat: tuple,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Process saline water extraction output and technical lifetime."""
     if len(desal_basins) > 0:
-        first_basin = desal_basins.iloc[0]["node"]
-        yv_ya = get_vintage_and_active_years(
-            scenario, first_basin, "extract_salinewater_basin"
-        )
+        info = context["water build info"]
+        yv_ya = get_vintage_and_active_years(info, "extract_salinewater_basin", 20)
 
         out_df = (
             make_df(
@@ -983,8 +957,9 @@ def _process_desalination_technology_parameters(
             continue
 
         # Get vintage-activity years
-        first_basin = tech_basins.iloc[0]["node"]
-        yv_ya = get_vintage_and_active_years(scenario, first_basin, row["tec"])
+        info = context["water build info"]
+        technical_lifetime = row.get("technical_lifetime_mid", None)
+        yv_ya = get_vintage_and_active_years(info, row["tec"], technical_lifetime)
 
         # Investment cost
         inv_cost = make_df(
@@ -1162,7 +1137,7 @@ def add_desalination(context: "Context", scenario=None) -> dict[str, pd.DataFram
 
     # Step 3: Process saline water extraction
     out_df, tl = _process_saline_water_extraction(
-        desal_basins, scen, sub_time, year_wat
+        desal_basins, context, sub_time, year_wat
     )
     results["output"] = out_df
 
