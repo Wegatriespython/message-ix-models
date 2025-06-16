@@ -1,0 +1,189 @@
+# Water Module Value Validation Ranges
+# This file defines realistic ranges for water module parameters
+# Used for regression testing to ensure generated values are sensible
+
+water_supply:
+  energy_intensities:  # TWh/MCM
+    surface_water:
+      min: 0.001141553
+      max: 0.03652968
+      typical: 0.018835616
+    groundwater:
+      min: 0.040
+      max: 0.075
+      typical: 0.055
+    fossil_groundwater:
+      min: 0.080  # 2x groundwater minimum
+      max: 0.150  # 2x groundwater maximum
+      typical: 0.110
+  
+  investment_costs:  # USD/MCM
+    surface_water:
+      min: 0.1
+      max: 0.25
+      typical: 0.15557
+    groundwater:
+      min: 0.03
+      max: 0.08
+      typical: 0.05452
+    fossil_groundwater:
+      min: 5.0
+      max: 15.0
+      typical: 8.178
+  
+  variable_costs:  # USD/MCM
+    basin_to_region:
+      min: 0.01
+      max: 0.05
+      typical: 0.02
+  
+  fixed_costs:  # USD/MCM
+    fossil_groundwater:
+      min: 0.2
+      max: 0.5
+      typical: 0.3
+  
+  technical_lifetimes:  # years
+    surface_water: 50
+    groundwater: 20
+    fossil_groundwater: 20
+  
+  historical_capacity:  # MCM/year
+    min: 10
+    max: 20000
+    # Highly variable by basin
+
+infrastructure:
+  investment_costs:  # USD/MCM
+    urban_td:
+      min: 0.5
+      max: 2.0
+      typical: 1.01
+    rural_td:
+      min: 0.2
+      max: 0.6
+      typical: 0.33
+    membrane_desal:
+      min: 1.5
+      max: 2.5
+      typical: 1.73
+    distillation_desal:
+      min: 1.5
+      max: 2.3
+      typical: 1.55
+  
+  fixed_costs:  # USD/MCM
+    urban_td:
+      min: 0.15
+      max: 0.4
+      typical: 0.25
+    rural_td:
+      min: 0.01
+      max: 0.03
+      typical: 0.016
+    membrane_desal:
+      min: 0.1
+      max: 0.25
+      typical: 0.155
+    distillation_desal:
+      min: 1.4
+      max: 2.0
+      typical: 1.65
+  
+  variable_costs:  # USD/MCM
+    urban_td:
+      min: 0.02
+      max: 0.05
+      typical: 0.032
+    rural_td:
+      min: 0.01
+      max: 0.03
+      typical: 0.017
+  
+  electricity_consumption:  # GWh/MCM
+    urban_td:
+      min: 0.1
+      max: 0.5
+      typical: 0.19
+    rural_td:
+      min: 0.1
+      max: 0.5
+      typical: 0.19
+    desalination:
+      min: 0.3
+      max: 0.6
+      typical: 0.4
+  
+  technical_lifetimes:  # years
+    urban_td: 40
+    rural_td: 20
+    sewerage: 40
+    treatment: 25
+    desalination: 30
+  
+  capacity_factors:  # fraction
+    most_infrastructure: 1.0
+    desalination: 0.85
+
+sectoral_demands:
+  urban_demands:  # MCM/year
+    small_basin:
+      min: 0.01
+      max: 50
+    medium_basin:
+      min: 50
+      max: 500
+    large_basin:
+      min: 500
+      max: 10000
+    mega_region:
+      min: 10000
+      max: 30000
+  
+  rural_demands:  # MCM/year
+    small_basin:
+      min: 0.1
+      max: 100
+    medium_basin:
+      min: 100
+      max: 1000
+    large_basin:
+      min: 1000
+      max: 5000
+    very_large:
+      min: 5000
+      max: 15000
+  
+  industrial_demands:  # MCM/year
+    small_basin:
+      min: 1
+      max: 100
+    medium_basin:
+      min: 100
+      max: 2000
+    large_industrial:
+      min: 2000
+      max: 50000
+  
+  connection_rates:  # fraction
+    developed_regions:
+      min: 0.9
+      max: 0.99
+    developing_regions:
+      min: 0.3
+      max: 0.8
+  
+  treatment_rates:  # fraction
+    developed_regions:
+      min: 0.8
+      max: 0.95
+    developing_regions:
+      min: 0.2
+      max: 0.6
+
+# SDG targets for validation
+sdg_targets:
+  urban_connection: 0.99
+  rural_connection: 0.80
+  urban_sanitation: 0.95
+  rural_sanitation: 0.80
