@@ -53,8 +53,6 @@ logging.getLogger("message_ix_models.model.water.data.water_for_ppl").setLevel(
 logging.getLogger("message_ix_models.tools.costs").setLevel(logging.ERROR)
 logging.getLogger("at.ac.iiasa.ixmp.Platform").setLevel(logging.ERROR)
 
-# --- Project-specific imports ---
-
 # ==============================================================================
 # Constants
 # ==============================================================================
@@ -269,7 +267,7 @@ WATER_TECHS_MAP = {
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
-def _add_par_data_robust(scenario, data):
+def _add_par_data(scenario, data):
     """A robust version of add_par_data that filters out None/NaN years."""
     for par_name, df in data.items():
         if isinstance(df, pd.DataFrame):
@@ -340,7 +338,7 @@ def _apply_and_commit(scenario, context, data_func, comment, **kwargs):
             return
 
         with scenario.transact(comment):
-            _add_par_data_robust(scenario, data)
+            _add_par_data(scenario, data)
 
         # Log scenario size after
         size_after = _get_scenario_size_info(scenario)
