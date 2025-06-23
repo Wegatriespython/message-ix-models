@@ -75,8 +75,8 @@ def _load_infrastructure_data() -> pd.DataFrame:
     pd.DataFrame
         Infrastructure technology data
     """
-    path = package_data_path("water", "infrastructure", "water_distribution.xlsx")
-    return pd.read_excel(path)
+    path = package_data_path("water", "infrastructure", "water_distribution.csv")
+    return pd.read_csv(path)
 
 
 def _load_desalination_data(
@@ -95,8 +95,8 @@ def _load_desalination_data(
         Desalination tech data, historical capacity data, projected capacity data
     """
     # Load technology data
-    path = package_data_path("water", "infrastructure", "desalination.xlsx")
-    df_desal = pd.read_excel(path)
+    path = package_data_path("water", "infrastructure", "desalination.csv")
+    df_desal = pd.read_csv(path)
 
     # Load historical capacity data
     path2 = package_data_path(

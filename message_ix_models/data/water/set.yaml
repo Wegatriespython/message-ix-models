@@ -1325,7 +1325,7 @@ nexus:
     #- [water_resource_extraction, extract_upstream_landuse]
     - [water_resource_extraction, extract_surfacewater]
     #- [water_resource_extraction, extract_freshwater_instream]
-    - [water_resource_extraction, extract_salinewater]
+    - [water_resource_extraction, extract_salinewater_cool]
     - [water_resource_extraction, extract_groundwater]
     - [water_resource_extraction, extract_gw_fossil]
     - [desalination, membrane]

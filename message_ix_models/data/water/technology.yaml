@@ -6,9 +6,9 @@ cooling:
       Freshwater extraction technology
     input: {commodity: freshwater_supply}
 
-  extract_salinewater:
+  extract_salinewater_cool:
     description: >-
-      Sea water extraction used for cooling technologies requiring seawater
+      Sea water extraction used specifically for cooling technologies requiring seawater
     input: {commodity: saline_supply_ppl}
 
   extract_groundwater:
