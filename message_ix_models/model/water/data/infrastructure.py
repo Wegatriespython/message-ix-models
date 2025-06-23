@@ -533,8 +533,6 @@ def _process_cost_parameters(
     return results
 
 
-
-
 def filter_basins_for_technology(
     technology: str, all_basins: pd.DataFrame, context: "Context"
 ) -> pd.DataFrame:
@@ -598,7 +596,9 @@ def create_input_data_for_technology(
     if len(relevant_basins) > 0:
         info = context["water build info"]
         technical_lifetime = technology_row.get("technical_lifetime_mid", None)
-        yv_ya = get_vintage_and_active_years(info, technology_row["tec"], technical_lifetime)
+        yv_ya = get_vintage_and_active_years(
+            info, technology_row["tec"], technical_lifetime
+        )
     else:
         return pd.DataFrame()
 
@@ -638,9 +638,7 @@ def start_creating_input_dataframe(
     # Process non-electric commodities
     for _, row in df_non_elec.iterrows():
         # Filter basins for this technology
-        relevant_basins = filter_basins_for_technology(
-            row["tec"], df_node, context
-        )
+        relevant_basins = filter_basins_for_technology(row["tec"], df_node, context)
 
         if len(relevant_basins) > 0:
             inp_df = create_input_data_for_technology(
@@ -657,9 +655,7 @@ def start_creating_input_dataframe(
         row_copy = row.copy()
         row_copy["value_mid"] = row[value_col]
 
-        relevant_basins = filter_basins_for_technology(
-            row["tec"], df_node, context
-        )
+        relevant_basins = filter_basins_for_technology(row["tec"], df_node, context)
 
         if len(relevant_basins) > 0:
             inp_df = create_input_data_for_technology(
@@ -675,7 +671,9 @@ def start_creating_input_dataframe(
         return pd.DataFrame()
 
 
-def add_infrastructure_techs(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
+def add_infrastructure_techs(
+    context: "Context", scenario=None
+) -> dict[str, pd.DataFrame]:
     """Process water distribution data for a scenario instance.
 
     Parameters
@@ -914,7 +912,7 @@ def _process_projected_capacity_bounds(
     df_proj: pd.DataFrame, desal_basins: pd.DataFrame
 ) -> pd.DataFrame:
     """Process projected desalination capacity bounds."""
-    if not df_proj.empty:
+    if not df_proj.empty:  # FIXME Investigate this, potential cause of infeasability.
         proj_basins = "B" + df_proj["BCU_name"]
         valid_proj = df_proj[proj_basins.isin(desal_basins["node"])]
 
@@ -928,7 +926,9 @@ def _process_projected_capacity_bounds(
                 unit="MCM/year",
             )
             bound_up["value"] = bound_up["value"].clip(lower=0)
-            bound_up = bound_up[bound_up["year_act"] > 2020]
+            bound_up = bound_up[
+                bound_up["year_act"] > 2030
+            ]  # This was changed from 2020.
             return bound_up
     return pd.DataFrame()
 

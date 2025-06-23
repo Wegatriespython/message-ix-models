@@ -6,6 +6,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import yaml
+from iam_units import registry
 from message_ix import make_df
 
 from message_ix_models import Context
@@ -19,6 +20,9 @@ from message_ix_models.util import (
 )
 
 log = logging.getLogger(__name__)
+
+# Convert m3/MJ to MCM/GWa
+m3_MJ_2_MCM_GWa = registry("m^3/MJ").to("m^3/GWa").magnitude
 
 
 def missing_tech(x: pd.Series) -> pd.Series:
@@ -455,11 +459,7 @@ def cool_tech(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     # this refers to activity per cooling requirement (heat)
     input_cool["value_cool"] = (
         input_cool["water_withdrawal_mid_m3_per_output"]
-        * 60
-        * 60
-        * 24
-        * 365
-        * 1e-6  # MCM
+        * m3_MJ_2_MCM_GWa  # conversion factor
         / input_cool["cooling_fraction"]
     )
     # set to 1e-6 if value_cool is negative
@@ -633,7 +633,7 @@ def cool_tech(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
                     value=icfb_df["value_return"],
                     unit="MCM/GWa",
                 )
-                .pipe(broadcast, node_dest=bs, time_dest= pd.Series(sub_time))
+                .pipe(broadcast, node_dest=bs, time_dest=pd.Series(sub_time))
                 .merge(df_sw, how="left")
             )
             # multiply by basin water availability share
@@ -749,6 +749,9 @@ def cool_tech(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
     input_cool_2015_set = set(
         zip(input_cool_2015["parent_tech"], input_cool_2015["node_loc"])
     )
+
+    # FIXME : This should have been a one off script for debugging.
+
     still_missing = input_cool_set - input_cool_2015_set
 
     if still_missing:
@@ -845,16 +848,8 @@ def cool_tech(context: "Context", scenario=None) -> dict[str, pd.DataFrame]:
 
     # Set config for cost projections
     # Using GDP method for cost projections
-    # Map country regions to their parent R12 regions for cost projections
-    cost_region = context.regions
-    if context.regions == "ZMB":
-        cost_region = "R12"  # Use R12 global data for ZMB (crude approximation)
-    elif context.type_reg == "country" and context.regions not in {"R11", "R12", "R20"}:
-        # For other country regions, default to R12 global
-        cost_region = "R12"
-    
     cfg = Config(
-        module="cooling", scenario=context.ssp, method="gdp", node=cost_region
+        module="cooling", scenario=context.ssp, method="gdp", node=context.regions
     )
 
     # Get projected investment and fixed o&m costs
@@ -1031,13 +1026,8 @@ def non_cooling_tec(context: "Context", scenario=None) -> dict[str, pd.DataFrame
     non_cool_df = non_cool_df.rename(columns={"technology_name": "technology"})
 
     non_cool_df["value"] = (
-        non_cool_df["water_withdrawal_mid_m3_per_output"]
-        * 60
-        * 60
-        * 24
-        * 365
-        * (1e-6)  # MCM
-    )
+        non_cool_df["water_withdrawal_mid_m3_per_output"] * m3_MJ_2_MCM_GWa
+    )  # Conversion factor
 
     non_cool_tech = list(non_cool_df["technology"].unique())
 
