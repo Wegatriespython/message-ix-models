@@ -243,7 +243,7 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
                 output_df,
                 make_df(
                     "output",
-                    technology="extract_salinewater",
+                    technology="extract_salinewater_cool",
                     value=1,
                     unit="MCM",
                     year_vtg=year_wat,
@@ -556,7 +556,7 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
                 output_df,
                 make_df(
                     "output",
-                    technology="extract_salinewater",
+                    technology="extract_salinewater_cool",
                     value=1,
                     unit="MCM",
                     year_vtg=year_wat,

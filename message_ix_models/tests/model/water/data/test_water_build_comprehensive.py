@@ -202,7 +202,7 @@ MODEL_SETUP_CONFIG = {
             "extract_surfacewater",
             "extract_groundwater",
             "extract_gw_fossil",
-            "extract_salinewater",
+            "extract_salinewater_cool",
             "extract_salinewater_basin",
         ],
         "infrastructure": [
