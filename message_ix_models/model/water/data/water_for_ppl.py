@@ -22,8 +22,8 @@ from message_ix_models.util import (
 log = logging.getLogger(__name__)
 
 # Convert m3/GJ to MCM/GWa
-m3_GJ_2_MCM_GWa = registry("m^3/GJ").to("m^3/GWa").magnitude / 1e-6
-# MCM not standard so have to remember to divide by 1e-6 each time.
+m3_GJ_2_MCM_GWa = registry("m^3/GJ").to("m^3/GWa").magnitude / 1e6
+# MCM not standard so have to remember to divide by 1e6 each time.
 
 
 def missing_tech(x: pd.Series) -> pd.Series:
