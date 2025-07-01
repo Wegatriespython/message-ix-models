@@ -758,7 +758,7 @@ def prepare_input_dataframe(
                 inp = make_df(
                     "input",
                     technology=row["tec"],
-                    value=row["value_high"],
+                    value=row["value_high"] / 1000,
                     unit="GWh/MCM",
                     level="final",
                     commodity="electr",
@@ -775,7 +775,7 @@ def prepare_input_dataframe(
                 inp_m1 = make_df(
                     "input",
                     technology=row["tec"],
-                    value=row["value_mid"],
+                    value=row["value_mid"] / 1000,
                     unit="GWh/MCM",
                     level="final",
                     commodity="electr",
@@ -789,7 +789,7 @@ def prepare_input_dataframe(
                 inp_mf = make_df(
                     "input",
                     technology=row["tec"],
-                    value=row["value_high"],
+                    value=row["value_high"] / 1000,
                     unit="GWh/MCM",
                     level="final",
                     commodity="electr",
@@ -805,7 +805,7 @@ def prepare_input_dataframe(
             inp = make_df(
                 "input",
                 technology=row["tec"],
-                value=row["value_mid"],
+                value=row["value_mid"] / 1000,
                 unit="GWh/MCM",
                 level="final",
                 commodity="electr",
