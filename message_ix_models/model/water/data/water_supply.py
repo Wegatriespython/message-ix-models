@@ -1,5 +1,6 @@
 """Prepare data for water use for cooling & energy technologies."""
 
+from iam_units import registry
 import numpy as np
 import pandas as pd
 from message_ix import Scenario, make_df
@@ -14,6 +15,9 @@ from message_ix_models.util import (
     same_node,
     same_time,
 )
+
+
+GWh_to_GWa = registry("1 GWh").to("GWa").magnitude
 
 
 @minimum_version("message_ix 3.7")
@@ -404,14 +408,15 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
 
         # electricity input dataframe  for extract freshwater supply
         # low: 0.001141553, mid: 0.018835616, high: 0.03652968
+        # units in GWa/km^3 which is identical to GWh/MCM.
         inp = pd.concat(
             [
                 inp,
                 make_df(
                     "input",
                     technology="extract_surfacewater",
-                    value=0.018835616,
-                    unit="-",
+                    value=0.018835616 / 1e3,
+                    unit="GWa/MCM",
                     level="final",
                     commodity="electr",
                     mode="M1",
@@ -432,8 +437,8 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
                 make_df(
                     "input",
                     technology="extract_groundwater",
-                    value=df_gwt["GW_per_km3_per_year"] + 0.043464579,
-                    unit="-",
+                    value=(df_gwt["GW_per_km3_per_year"] + 0.043464579) / 1e3,
+                    unit="GWa/MCM",
                     level="final",
                     commodity="electr",
                     mode="M1",
@@ -454,9 +459,9 @@ def add_water_supply(context: "Context", scenario=None) -> dict[str, pd.DataFram
                 make_df(
                     "input",
                     technology="extract_gw_fossil",
-                    value=(df_gwt["GW_per_km3_per_year"] + 0.043464579)
-                    * 2,  # twice as much normal gw
-                    unit="-",
+                    value=((df_gwt["GW_per_km3_per_year"] + 0.043464579) * 2)
+                    / 1e3,  # twice as much normal gw
+                    unit="GWa/MCM",
                     level="final",
                     commodity="electr",
                     mode="M1",

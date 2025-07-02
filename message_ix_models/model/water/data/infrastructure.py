@@ -37,6 +37,8 @@ ANNUAL_CAPACITY_FACTOR = 5  # Convert 5-year capacity to annual
 # Convert km³ to MCM: 1 km³ = 1e9 m³, 1 MCM = 1e6 m³, so factor = 1000
 KM3_TO_MCM = registry("1 km^3").to("meter^3").magnitude / 1e6  # km³ to MCM conversion
 
+GWh_to_GWa = registry("1 GWh").to("GWa").magnitude
+
 
 def _load_basin_data(context: "Context") -> pd.DataFrame:
     """Load and prepare basin delineation data.
@@ -758,8 +760,8 @@ def prepare_input_dataframe(
                 inp = make_df(
                     "input",
                     technology=row["tec"],
-                    value=row["value_high"],
-                    unit="GWh/MCM",
+                    value=row["value_high"] * GWh_to_GWa,
+                    unit="GWa/MCM",
                     level="final",
                     commodity="electr",
                     mode="Mf",
@@ -775,8 +777,8 @@ def prepare_input_dataframe(
                 inp_m1 = make_df(
                     "input",
                     technology=row["tec"],
-                    value=row["value_mid"],
-                    unit="GWh/MCM",
+                    value=row["value_mid"] * GWh_to_GWa,
+                    unit="GWa/MCM",
                     level="final",
                     commodity="electr",
                     mode="M1",
@@ -789,8 +791,8 @@ def prepare_input_dataframe(
                 inp_mf = make_df(
                     "input",
                     technology=row["tec"],
-                    value=row["value_high"],
-                    unit="GWh/MCM",
+                    value=row["value_high"] * GWh_to_GWa,
+                    unit="GWa/MCM",
                     level="final",
                     commodity="electr",
                     mode="Mf",
@@ -805,8 +807,8 @@ def prepare_input_dataframe(
             inp = make_df(
                 "input",
                 technology=row["tec"],
-                value=row["value_mid"],
-                unit="GWh/MCM",
+                value=row["value_mid"] * GWh_to_GWa,
+                unit="GWa/MCM",
                 level="final",
                 commodity="electr",
                 mode="M1",
@@ -988,14 +990,15 @@ def _process_desalination_technology_parameters(
             mode="M1",
         ).pipe(broadcast, labels=yv_ya, node_loc=tech_basins["node"], time=sub_time)
         var_dfs.append(var_cost)
-
+        # Assume the unit is GWa/km3 for a mid value of around 0.3x for membrane and 0.4x distillation.
+        # Would explain how the model worked when it was in km3
         # Electricity input
         if row["electricity_input_mid"] > 0:
             inp_elec = make_df(
                 "input",
                 technology=row["tec"],
-                value=row["electricity_input_mid"],
-                unit="-",
+                value=row["electricity_input_mid"] / 1e3,
+                unit="GWa/MCM",
                 level="final",
                 commodity="electr",
                 mode="M1",
@@ -1010,8 +1013,8 @@ def _process_desalination_technology_parameters(
             inp_heat = make_df(
                 "input",
                 technology=row["tec"],
-                value=row["heat_input_mid"],
-                unit="-",
+                value=row["heat_input_mid"] / 1e3,
+                unit="GWa/MCM",
                 level="final",
                 commodity="d_heat",
                 mode="M1",
