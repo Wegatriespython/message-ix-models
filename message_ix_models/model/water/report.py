@@ -1374,8 +1374,9 @@ def report(sc: Scenario, reg: str, sdgs: bool = False) -> None:
     report_pd = report_pd[-report_pd.variable.isin(water_hydro_var)]
 
     # add water population
-    pop_sdg6 = pop_water_access(sc, reg, sdgs)
-    report_pd = pd.concat([report_pd, pop_sdg6])
+    if sdgs != "baseline":
+        pop_sdg6 = pop_water_access(sc, reg, sdgs)
+        report_pd = pd.concat([report_pd, pop_sdg6])
 
     # add units
     for index, row in map_agg_pd.iterrows():
