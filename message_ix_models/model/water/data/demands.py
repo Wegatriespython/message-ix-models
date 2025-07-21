@@ -7,11 +7,10 @@ from typing import TYPE_CHECKING, Literal, Union
 import numpy as np
 import pandas as pd
 import xarray as xr
-from iam_units import registry
 from message_ix import make_df
 
-from message_ix_models.util import broadcast, package_data_path
 from message_ix_models.model.water.utils import KM3_TO_MCM
+from message_ix_models.util import broadcast, package_data_path
 
 if TYPE_CHECKING:
     from message_ix_models import Context

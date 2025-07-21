@@ -5,15 +5,14 @@ from itertools import product
 from typing import Optional
 from warnings import warn
 
-import numpy as np
 import pandas as pd
 import xarray as xr
+from iam_units import registry
 from sdmx.model.v21 import Code
 
 from message_ix_models import Context
 from message_ix_models.model.structure import get_codes
 from message_ix_models.util import load_package_data
-from iam_units import registry
 
 log = logging.getLogger(__name__)
 

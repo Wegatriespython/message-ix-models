@@ -8,10 +8,10 @@ from message_ix_models import Context, ScenarioInfo
 from message_ix_models.model.water.data.demands import read_water_availability
 from message_ix_models.model.water.utils import (
     ANNUAL_CAPACITY_FACTOR,
-    GWa_KM3_TO_GWa_MCM,
-    get_vintage_and_active_years,
     KM3_TO_MCM,
     USD_KM3_TO_USD_MCM,
+    GWa_KM3_TO_GWa_MCM,
+    get_vintage_and_active_years,
 )
 from message_ix_models.util import (
     broadcast,

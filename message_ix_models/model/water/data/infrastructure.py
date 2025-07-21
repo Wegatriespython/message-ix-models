@@ -12,8 +12,8 @@ from message_ix_models.model.water.utils import (
     ANNUAL_CAPACITY_FACTOR,
     KM3_TO_MCM,
     USD_M3DAY_TO_USD_MCM,
-    kWh_m3_TO_GWa_MCM,
     get_vintage_and_active_years,
+    kWh_m3_TO_GWa_MCM,
 )
 from message_ix_models.util import (
     broadcast,
