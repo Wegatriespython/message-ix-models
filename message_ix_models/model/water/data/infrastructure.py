@@ -547,7 +547,7 @@ def add_infrastructure_techs(context: "Context") -> dict[str, pd.DataFrame]:
                 ]
             )
         results["var_cost"] = var_cost
-    
+
     # Add the input dataframe to results
     results["input"] = inp_df
 
