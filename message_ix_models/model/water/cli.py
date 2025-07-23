@@ -320,3 +320,69 @@ def report_cli(context: "Context", output_model, sdgs, water=False):
         from message_ix_models.model.water.report import report_full
 
         report_full(sc, reg, sdgs)
+
+
+@cli.command("modify")
+@click.pass_obj
+@click.option(
+    "--rcps",
+    type=click.Choice(_RCPS),
+    help="Modify scenario to use different RCP climate scenario",
+)
+@common_params("regions")
+@scenario_param("--ssp")
+def modify_cli(context: "Context", regions, rcps):
+    """Efficiently modify existing water scenario parameters.
+
+    This command allows you to change scenario parameters (like RCP)
+    without rebuilding the entire scenario from scratch. This is much
+    faster when you have an existing scenario and want to test
+    different parameter values.
+
+    Use the --url option to specify the scenario to modify.
+    """
+    modify_scenario(context, regions, rcps)
+
+
+def modify_scenario(context: "Context", regions, rcps):
+    """Modify an existing water scenario with new parameters.
+
+    Parameters
+    ----------
+    context : Context
+        Information about target Scenario.
+    regions : str
+        Specifies what region definition is used
+    rcps : str
+        New RCP climate scenario to apply
+    """
+    from .modify import modify_rcp
+
+    # Validate inputs
+    if not rcps:
+        raise click.UsageError("Must specify --rcps parameter to modify")
+
+    # Get the scenario to modify
+    scenario = context.get_scenario()
+
+    if not scenario:
+        raise click.UsageError(
+            "No scenario specified. Use --url to specify the scenario to modify."
+        )
+
+    log.info(f"Modifying scenario {scenario.model}.{scenario.scenario}")
+    log.info(f"Changing RCP to: {rcps}")
+
+    # Initialize water context if needed
+    water_ini(context, regions, None)
+
+    # Perform the modification
+    modify_rcp(scenario, context, rcps)
+
+    # Set as default for easy access
+    scenario.set_as_default()
+
+    log.info(f"Successfully modified scenario to RCP {rcps}")
+    log.info(
+        f"Modified scenario: {scenario.model}.{scenario.scenario}.{scenario.version}"
+    )
