@@ -1035,11 +1035,6 @@ def report(sc: Scenario, reg: str, sdgs: bool = False) -> None:
                 "million US$2010/yr",
             ],
             [
-                "Investment|Infrastructure|Water|Other",
-                extrt_sw_inv + extrt_gw_inv + extrt_fgw_inv,
-                "million US$2010/yr",
-            ],
-            [
                 "Investment|Infrastructure|Water|Extraction|Surface",
                 extrt_sw_inv,
                 "million US$2010/yr",
