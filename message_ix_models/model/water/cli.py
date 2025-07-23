@@ -167,7 +167,7 @@ def nexus(context: "Context", regions, rcps, sdgs, rels, macro=False):
 
     # Determine the output scenario name based on the --url CLI option. If the
     # user did not give a recognized value, this raises an error
-    output_scenario_name = context.output_scenario + "_nexus"
+    output_scenario_name = context.output_scenario + f"_nexus_{rcps}_{sdgs}_{rels}"
     output_model_name = context.output_model
 
     # Clone and build
@@ -191,11 +191,11 @@ def nexus(context: "Context", regions, rcps, sdgs, rels, macro=False):
     if macro:
         scen.solve(
             model="MESSAGE-MACRO",
-            solve_options={"lpmethod": "4", "scaind": "1"},
+            solve_options={"lpmethod": "4", "scaind": "-1"},
             case=caseName,
         )
     else:
-        scen.solve(solve_options={"lpmethod": "4", "scaind": "1"}, case=caseName)
+        scen.solve(solve_options={"lpmethod": "4", "scaind": "-1"}, case=caseName)
 
     # if options["report"]:
     #     # Also output diagnostic reports
