@@ -139,6 +139,27 @@ def test_add_water_availability(test_context, time):
         ]
     )
 
+    # Check for negative values in share constraints
+    # Share values should be between 0 and 1 (representing 0% to 100%)
+    negative_shares = result["share_commodity_lo"][
+        result["share_commodity_lo"]["value"] < 0
+    ]
+    assert negative_shares.empty, (
+        f"share_commodity_lo contains {len(negative_shares)} negative values. "
+        f"Share constraints must be non-negative (0-1 range). "
+        f"Found values: {negative_shares[['node_share', 'year_act', 'value']].head()}"
+    )
+
+    # Also check that shares don't exceed 1 (100%)
+    excessive_shares = result["share_commodity_lo"][
+        result["share_commodity_lo"]["value"] > 1
+    ]
+    assert excessive_shares.empty, (
+        f"share_commodity_lo contains {len(excessive_shares)} values > 1. "
+        f"Share constraints must be in 0-1 range. "
+        f"Found values: {excessive_shares[['node_share', 'year_act', 'value']].head()}"
+    )
+
 
 def test_add_irrigation_demand(request, test_context):
     # FIXME You probably want this to be part of a common setup rather than writing
