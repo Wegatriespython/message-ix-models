@@ -929,15 +929,24 @@ def add_water_availability(context: "Context") -> dict[str, pd.DataFrame]:
     results["demand"] = dmd_df
 
     # share constraint lower bound on groundwater
+    # Calculate the share ratio with proper handling of edge cases
+    # When groundwater values are negative (depletion), set share to 0
+    # This represents scenarios where groundwater extraction should be minimized
+    share_values = df_gw["value"] / (df_sw["value"] + df_gw["value"]) * 0.95
+    
+    # Guard against invalid values:
+    # - Negative shares (from negative groundwater availability)
+    # - Values > 1 (theoretically shouldn't happen but guard against it)
+    # - NaN values (from division by zero when both are zero)
+    share_values = share_values.clip(lower=0, upper=1).fillna(0)
+    
     df_share = make_df(
         "share_commodity_lo",
         shares="share_low_lim_GWat",
         node_share="B" + df_gw["Region"].astype(str),
         year_act=df_gw["year"],
         time=df_gw["time"],
-        value=df_gw["value"]
-        / (df_sw["value"] + df_gw["value"])
-        * 0.95,  # 0.95 buffer factor to avoid numerical error
+        value=share_values,
         unit="-",
     )
 
