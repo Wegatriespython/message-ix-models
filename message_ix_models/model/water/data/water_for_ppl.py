@@ -453,6 +453,11 @@ def cool_tech(
     PATH = package_data_path("water", "delineation", FILE2)
 
     df_node = pd.read_csv(PATH)
+
+    # Apply basin filtering to only include valid basins
+    if hasattr(context, "valid_basins") and context.valid_basins:
+        df_node = df_node[df_node["BCU_name"].isin(context.valid_basins)]
+
     # Assigning proper nomenclature
     df_node["node"] = "B" + df_node["BCU_name"].astype(str)
     df_node["mode"] = "M" + df_node["BCU_name"].astype(str)
@@ -1081,7 +1086,7 @@ def cool_tech(
         "soft_new_capacity_up",
         "level_cost_activity_soft_up",
         "level_cost_activity_soft_lo",
-        "growth_activity_lo",
+        # "growth_activity_lo",
         "growth_activity_up",
         "growth_new_capacity_up",
     ]
@@ -1203,6 +1208,14 @@ def non_cooling_tec(context: "Context", scenario=None) -> dict[str, pd.DataFrame
         (n_cool_df["node_loc"] != f"{context.regions}_GLB")
         & (n_cool_df["node_dest"] != f"{context.regions}_GLB")
     ]
+
+    # Apply basin filtering to only include valid basins
+    if hasattr(context, "valid_basins") and context.valid_basins:
+        # Filter node_dest (basin nodes) to only include valid basins
+        # Basin nodes are formatted as "B123", so extract basin name and check if in valid_basins
+        n_cool_df = n_cool_df[
+            n_cool_df["node_dest"].str.replace("B", "", 1).isin(context.valid_basins)
+        ]
     n_cool_df_merge = pd.merge(n_cool_df, non_cool_df, on="technology", how="right")
     n_cool_df_merge.dropna(inplace=True)
 
