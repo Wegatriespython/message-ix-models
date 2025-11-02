@@ -586,6 +586,34 @@ def map_basin(context: Context) -> Mapping[str, ScenarioInfo]:
     return dict(require=require, remove=remove, add=add)
 
 
+def add_water_structure(c) -> None:
+    """Add tasks to `c` for structures required by water reporting.
+
+    Registers technology groupings from water_tech_spec.yaml for use with
+    genno operators like aggregate() and select().
+
+    Parameters
+    ----------
+    c : genno.Computer
+        Computer instance to add tasks to.
+    """
+    from genno import quote
+
+    from .water_generator import get_water_technology_groups
+
+    # Get hierarchical technology groups
+    water_groups = get_water_technology_groups()
+
+    # Register groups in Computer for use by genno operators
+    # "t::water agg" is used with aggregate() to group individual technologies
+    # into reporting categories (e.g., extraction|freshwater|groundwater)
+    tasks = [
+        ("t::water agg", quote(dict(t=water_groups))),
+    ]
+
+    c.add_queue(map(lambda t: (t, dict(strict=False)), tasks))
+
+
 def main(context: Context, scenario, **options):
     """Set up MESSAGEix-Nexus on `scenario`.
 
