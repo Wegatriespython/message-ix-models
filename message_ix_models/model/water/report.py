@@ -7,13 +7,12 @@ the same patterns as :mod:`.transport.report`.
 import logging
 from typing import TYPE_CHECKING
 
-from genno import Computer, Key, KeySeq, MissingKeyError
 from message_ix import Reporter
 
 from message_ix_models import Context
 
 if TYPE_CHECKING:
-    pass
+    from genno import Computer, Key, KeySeq, MissingKeyError
 
 log = logging.getLogger(__name__)
 
