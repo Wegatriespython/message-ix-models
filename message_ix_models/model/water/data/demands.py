@@ -184,12 +184,13 @@ def add_sectoral_demands(context: "Context") -> dict[str, pd.DataFrame]:
     # defines path to read in demand data
     region = f"{context.regions}"
     sub_time = context.time
+    ssp = context.ssp.lower()  # "SSP2" → "ssp2"
     path = package_data_path("water", "demands", "harmonized", region, ".")
     # make sure all of the csvs have format, otherwise it might not work
-    list_of_csvs = list(path.glob("ssp2_regional_*.csv"))
+    list_of_csvs = list(path.glob(f"{ssp}_regional_*.csv"))
     # define names for variables
     fns = [os.path.splitext(os.path.basename(x))[0] for x in list_of_csvs]
-    fns = " ".join(fns).replace("ssp2_regional_", "").split()
+    fns = " ".join(fns).replace(f"{ssp}_regional_", "").split()
     # dictionary for reading csv files
     d: dict[str, pd.DataFrame] = {}
 
@@ -229,7 +230,7 @@ def add_sectoral_demands(context: "Context") -> dict[str, pd.DataFrame]:
     # withdrawals and return flows with monthly data and also add industrial
     if "year" not in context.time:
         PATH = package_data_path(
-            "water", "demands", "harmonized", region, "ssp2_m_water_demands.csv"
+            "water", "demands", "harmonized", region, f"{ssp}_m_water_demands.csv"
         )
         df_m: pd.DataFrame = pd.read_csv(PATH)
         df_m.value *= 30  # from mcm/day to mcm/month
