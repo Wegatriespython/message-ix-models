@@ -1,40 +1,24 @@
-"""Cooling CID: Jones et al. freshwater cooling efficiency degradation.
+"""Cooling CID: thermoelectric capacity degradation under warming.
 
-Warming reduces the thermal margin between river discharge limits and intake
-temperature, degrading freshwater cooling capacity. This module predicts
-regional capacity factors from GMT via RIME emulators and builds MESSAGE
-``relation_activity`` constraints that bound freshwater cooling activity
-as a function of warming.
+Two mechanisms, two MESSAGE representations:
 
-Data: ``r12_capacity_gwl_ensemble.nc`` (12 R12 regions x 47 GWL bins).
-No resolution expansion needed — RIME cooling data is native R12.
-
-Constraint per parent technology *p*, region *r*, year *t* (t >= min_year)::
+**Wet (freshwater) cooling** — Jones et al. degradation. Warming reduces
+the thermal margin between discharge limits and intake temperature.
+Modeled via ``relation_activity`` constraints bounding freshwater cooling
+activity as a function of warming::
 
     ACT[p__cl_fresh] + ACT[p__ot_fresh]
         <= r_jones(r,t) * s_ref(r) * f_cool(p) * ACT[p]
 
-Where *r_jones* = CF(GMT) / CF(baseline), *s_ref* = reference freshwater
-share, *f_cool* = cooling fraction from ``addon_conversion``.
+**Dry (air) cooling** — Qin et al. thermodynamic derating. Higher ambient
+temperature increases condenser backpressure and parasitic fan load.
+Modeled via direct ``capacity_factor`` replacement on ``__air``
+technologies — the degradation is a derating of the unit, not a resource
+constraint.
 
-Design note — relation_activity vs addon_up
--------------------------------------------
-The existing addon mechanism (``cooling__<parent>``) links all four cooling
-variants to parent heat rejection and is indexed by timeslice. An
-``addon_up`` constraint would apply *per timeslice*, which is stricter than
-needed when the Jones ratio is annual. Using it would also require a new
-addon type (``cooling_fw__<parent>``) covering only freshwater variants, with
-new ``cat_addon``, ``map_tec_addon``, and ``addon_conversion`` entries — more
-invasive than the relation approach, not simpler.
-
-``RELATION_EQUIVALENCE`` has no timeslice index, so it constrains the annual
-aggregate, which matches the annual RIME emulator. The ``REL`` auxiliary
-variable is also directly inspectable in GDX output for binding analysis.
-
-If seasonal Jones ratios are derived (separate summer/winter CF degradation,
-e.g. for the EGU subannual cooling extension), the addon_up path becomes the
-right framework: per-timeslice constraint application would then be correct
-and the set restructuring would be warranted.
+Data: ``r12_thermoelectric_gwl.nc`` (cooling × 12 R12 regions × 72 GWL
+bins). Capacity-weighted country→R12 aggregation from plant-level
+simulation.
 """
 
 import functools
@@ -57,10 +41,13 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_DATASET = "r12_capacity_gwl_ensemble.nc"
+_DATASET = "r12_thermoelectric_gwl.nc"
 _VAR = "capacity_factor"
 _DEFAULT_BASELINE_GWL = 1.0
 _DEFAULT_MIN_YEAR = 2045
+
+_WET_SEL = {"cooling": "wet"}
+_DRY_SEL = {"cooling": "dry"}
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +89,10 @@ def _freshwater_reference_shares() -> pd.Series:
 # ---------------------------------------------------------------------------
 
 
-def predict_cooling_cf(gmt_array: np.ndarray) -> pd.DataFrame:
+def predict_cooling_cf(
+    gmt_array: np.ndarray,
+    cooling: str = "wet",
+) -> pd.DataFrame:
     """Predict regional capacity factors from GMT.
 
     Parameters
@@ -110,6 +100,8 @@ def predict_cooling_cf(gmt_array: np.ndarray) -> pd.DataFrame:
     gmt_array
         GMT values in degC above pre-industrial. Shape ``(n_years,)`` or
         ``(n_runs, n_years)`` for ensemble (returns expectation).
+    cooling
+        ``"wet"`` (freshwater) or ``"dry"`` (air).
 
     Returns
     -------
@@ -117,27 +109,31 @@ def predict_cooling_cf(gmt_array: np.ndarray) -> pd.DataFrame:
         Wide DataFrame with ``region`` index (short codes) and one column
         per GMT input position. Values are capacity factors (fractions).
     """
+    sel = _WET_SEL if cooling == "wet" else _DRY_SEL
     gmt_array = np.asarray(gmt_array)
     gmt_clipped = clip_gmt(gmt_array, gmt_min=0.6, gmt_ceil=0.9)
 
     dataset_path = impacts_data_path("rime", _DATASET)
-    raw = predict_rime(gmt_clipped, dataset_path, _VAR)
+    raw = predict_rime(gmt_clipped, dataset_path, _VAR, sel=sel)
     # raw shape: (12, n_years) — regions x time positions
 
     regions = _region_codes()
     return pd.DataFrame(raw, index=pd.Index(regions, name="region"))
 
 
-def compute_jones_ratios(
+def compute_degradation_ratios(
     gmt_array: np.ndarray,
+    cooling: str = "wet",
     baseline_gwl: float = _DEFAULT_BASELINE_GWL,
 ) -> pd.DataFrame:
-    """Compute Jones degradation ratios: CF(GMT) / CF(baseline).
+    """Compute degradation ratios: CF(GMT) / CF(baseline).
 
     Parameters
     ----------
     gmt_array
         GMT trajectory. Shape ``(n_years,)`` or ``(n_runs, n_years)``.
+    cooling
+        ``"wet"`` (freshwater) or ``"dry"`` (air).
     baseline_gwl
         Reference warming level (degC). Default 1.0.
 
@@ -148,17 +144,22 @@ def compute_jones_ratios(
         relative to baseline — below 1 under warming, above 1 if GMT
         dips below baseline.
     """
-    cf = predict_cooling_cf(gmt_array)
+    sel = _WET_SEL if cooling == "wet" else _DRY_SEL
+    cf = predict_cooling_cf(gmt_array, cooling=cooling)
 
     # Baseline CF: single-point prediction at baseline_gwl
     dataset_path = impacts_data_path("rime", _DATASET)
-    cf_baseline = predict_rime(np.array([baseline_gwl]), dataset_path, _VAR)[
-        :, 0
-    ]  # (12,)
+    cf_baseline = predict_rime(
+        np.array([baseline_gwl]), dataset_path, _VAR, sel=sel
+    )[:, 0]  # (12,)
 
     # Ratio: broadcast baseline across time axis
     ratios = cf.values / cf_baseline[:, np.newaxis]
     return pd.DataFrame(ratios, index=cf.index.copy(), columns=cf.columns.copy())
+
+
+# Keep old name as alias for backward compatibility in cid_pipeline.py
+compute_jones_ratios = compute_degradation_ratios
 
 
 # ---------------------------------------------------------------------------
@@ -365,3 +366,73 @@ def build_cooling_constraints(
         "relation_upper": rel_up,
         "relation_names": sorted(relation_names),
     }
+
+
+# ---------------------------------------------------------------------------
+# Dry cooling: capacity_factor replacement
+# ---------------------------------------------------------------------------
+
+
+def build_dry_cooling_factors(
+    cf_air: pd.DataFrame,
+    dry_ratios: pd.DataFrame,
+    model_years: list[int],
+    min_year: int = _DEFAULT_MIN_YEAR,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build replacement ``capacity_factor`` rows for ``__air`` technologies.
+
+    Parameters
+    ----------
+    cf_air
+        Existing ``capacity_factor`` rows for ``__air`` technologies,
+        as returned by ``scenario.par("capacity_factor", ...)``.
+    dry_ratios
+        Output of :func:`compute_degradation_ratios` with ``cooling="dry"``.
+        Rows = R12 short codes, columns = model years.
+    model_years
+        Which years the ratios cover.
+    min_year
+        Earliest year for modification. Default 2045.
+
+    Returns
+    -------
+    old_cf
+        Rows that will be removed (affected years only).
+    new_cf
+        Replacement rows with values scaled by dry degradation ratio.
+    """
+    if cf_air.empty:
+        log.warning("No __air capacity_factor rows provided")
+        return pd.DataFrame(), pd.DataFrame()
+
+    constrained_years = [y for y in model_years if y >= min_year]
+    if not constrained_years:
+        log.warning("No model years >= %d for dry cooling", min_year)
+        return pd.DataFrame(), pd.DataFrame()
+
+    # Filter to affected years
+    cf_affected = cf_air[cf_air["year_act"].isin(constrained_years)].copy()
+    if cf_affected.empty:
+        log.warning("No __air capacity_factor rows for years %s", constrained_years)
+        return pd.DataFrame(), pd.DataFrame()
+
+    old_cf = cf_affected.copy()
+
+    # Apply dry degradation ratio per (node, year)
+    new_cf = cf_affected.copy()
+    for idx, row in new_cf.iterrows():
+        region_short = extract_region_code(row["node_loc"])
+        year = row["year_act"]
+        if region_short in dry_ratios.index and year in dry_ratios.columns:
+            ratio = float(dry_ratios.loc[region_short, year])
+            new_cf.at[idx, "value"] = row["value"] * ratio
+
+    n_modified = len(new_cf)
+    log.info(
+        "Built dry cooling factors: %d rows, years %d-%d",
+        n_modified,
+        min(constrained_years),
+        max(constrained_years),
+    )
+
+    return old_cf, new_cf
