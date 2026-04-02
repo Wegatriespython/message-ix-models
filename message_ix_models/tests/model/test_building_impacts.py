@@ -1,37 +1,35 @@
 """Tests for model.buildings.impacts — building energy CID integration."""
 
 import numpy as np
+import pandas as pd
 import pytest
+import xarray as xr
 
 from message_ix_models.model.buildings.impacts import (
-    _EJ_TO_GWA,
-    _MJ_MM2_TO_EJ,
     _ei_to_dataframe,
     _mfh_weighted_ei,
     compute_building_cids,
     load_correction_coefficients,
     load_floor_areas,
     load_sector_fractions,
+    load_theta,
     predict_building_ei,
 )
-
-
-class TestUnitConversions:
-    def test_ej_to_gwa(self):
-        # 1 EJ = ~31.688 GWa
-        assert 31 < _EJ_TO_GWA < 32
-
-    def test_mj_mm2_to_ej(self):
-        # MJ/m2 * Mm2 = TJ → /1e6 = EJ
-        assert _MJ_MM2_TO_EJ == 1e-6
+from message_ix_models.tools.impacts import impacts_data_path
 
 
 class TestDataLoading:
     def test_correction_coefficients_resid(self):
         df = load_correction_coefficients("cool", "S1", "resid")
-        assert {"region", "arch", "urt", "year", "correction_coeff", "floor_Mm2"} <= set(
-            df.columns
-        )
+        expected = {
+            "region",
+            "arch",
+            "urt",
+            "year",
+            "correction_coeff",
+            "floor_Mm2",
+        }
+        assert expected <= set(df.columns)
         assert len(df) > 0
         # Regions are short codes (no R12_ prefix)
         assert df["region"].str.startswith("R12_").sum() == 0
@@ -98,9 +96,6 @@ class TestPrediction:
 
 class TestEiToDataframe:
     def test_roundtrip(self):
-        import xarray as xr
-        from message_ix_models.tools.impacts import impacts_data_path
-
         ds = xr.open_dataset(
             str(impacts_data_path("rime", "region_EI_cool_gwl_binned.nc"))
         )
@@ -116,9 +111,6 @@ class TestEiToDataframe:
 
 class TestMfhWeightedEi:
     def test_produces_output(self):
-        import xarray as xr
-        from message_ix_models.tools.impacts import impacts_data_path
-
         ds = xr.open_dataset(
             str(impacts_data_path("rime", "region_EI_cool_gwl_binned.nc"))
         )
@@ -135,8 +127,20 @@ class TestMfhWeightedEi:
 
 class TestComputeBuildingCids:
     _MODEL_YEARS = [
-        2020, 2025, 2030, 2035, 2040, 2045, 2050,
-        2055, 2060, 2070, 2080, 2090, 2100, 2110,
+        2020,
+        2025,
+        2030,
+        2035,
+        2040,
+        2045,
+        2050,
+        2055,
+        2060,
+        2070,
+        2080,
+        2090,
+        2100,
+        2110,
     ]
 
     @pytest.fixture
@@ -167,6 +171,55 @@ class TestComputeBuildingCids:
 
     def test_units_are_gwa(self, cids):
         cooling, _ = cids
-        # Global cooling demand in 2020 should be order of magnitude 1-100 GWa
-        total_2020 = cooling[cooling["year"] == 2020]["value"].sum()
-        assert 0.1 < total_2020 < 500, f"Unexpected 2020 cooling: {total_2020} GWa"
+        # Output starts at the first year covered by the theta calibration.
+        first_year = int(
+            min(
+                load_theta("cool", "SSP2")["year"].min(),
+                load_theta("heat", "SSP2")["year"].min(),
+            )
+        )
+        total_first_year = cooling.loc[cooling["year"] == first_year, "value"].sum()
+        assert 0.1 < total_first_year < 500, (
+            f"Unexpected {first_year} cooling: {total_first_year} GWa"
+        )
+
+    def test_theta_reproduces_calibrated_demand_at_gwl_1_1(self):
+        years = np.arange(2020, 2101)
+        model_years = self._MODEL_YEARS
+        gmt = np.full(len(years), 1.1)
+
+        cooling, heating = compute_building_cids(
+            gmt,
+            years,
+            model_years,
+            reference_scenario="SSP2",
+        )
+
+        fractions = load_sector_fractions("SSP2")
+        rc_spec = pd.read_csv("_staging/rc_spec_baseline.csv")[
+            ["node", "year", "value"]
+        ]
+        rc_therm = pd.read_csv("_staging/rc_therm_baseline.csv")[
+            ["node", "year", "value"]
+        ]
+
+        for cid_df, scenario_df, frac_cols in (
+            (cooling, rc_spec, ["frac_resid_cool", "frac_comm_cool"]),
+            (heating, rc_therm, ["frac_resid_heat", "frac_comm_heat"]),
+        ):
+            calibrated = scenario_df.merge(
+                fractions[["node", "year"] + frac_cols],
+                on=["node", "year"],
+                how="inner",
+            )
+            calibrated = calibrated.assign(
+                calibrated=lambda df: df["value"] * df[frac_cols].sum(axis=1)
+            )[["node", "year", "calibrated"]]
+
+            merged = cid_df.merge(calibrated, on=["node", "year"], how="inner")
+            np.testing.assert_allclose(
+                merged["value"],
+                merged["calibrated"],
+                atol=1e-10,
+                rtol=0,
+            )

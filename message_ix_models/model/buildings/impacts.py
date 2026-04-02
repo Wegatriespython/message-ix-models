@@ -83,15 +83,15 @@ from message_ix_models.tools.impacts import (
 )
 from message_ix_models.util import package_data_path
 
+from iam_units import registry
+
 log = logging.getLogger(__name__)
 
-# E [EJ] = gamma * EI [MJ/m2] * F [Mm2] / 1e6
 # MJ/m2 * Mm2 = MJ * 1e6 = TJ; TJ / 1e6 = EJ
 _MJ_MM2_TO_EJ = 1e-6
 
 # MESSAGE demand parameter expects GWa
-# 1 EJ = 1e18 / (1e9 * 365.25 * 24 * 3600) GWa
-_EJ_TO_GWA = 1e18 / (1e9 * 365.25 * 24 * 3600)
+_EJ_TO_GWA = registry("1 EJ").to("GW * year").magnitude
 
 _REFERENCE_SCENARIO = "SSP2"
 
