@@ -123,6 +123,7 @@ def predict_cooling_cf(
 
 def compute_degradation_ratios(
     gmt_array: np.ndarray,
+    years: list[int],
     cooling: str = "wet",
     baseline_gwl: float = _DEFAULT_BASELINE_GWL,
 ) -> pd.DataFrame:
@@ -132,6 +133,8 @@ def compute_degradation_ratios(
     ----------
     gmt_array
         GMT trajectory. Shape ``(n_years,)`` or ``(n_runs, n_years)``.
+    years
+        Year labels for the time axis. Length must match ``n_years``.
     cooling
         ``"wet"`` (freshwater) or ``"dry"`` (air).
     baseline_gwl
@@ -140,7 +143,7 @@ def compute_degradation_ratios(
     Returns
     -------
     pd.DataFrame
-        Same shape as :func:`predict_cooling_cf` output. Values are ratios
+        Rows = R12 region short codes, columns = *years*. Values are ratios
         relative to baseline — below 1 under warming, above 1 if GMT
         dips below baseline.
     """
@@ -155,7 +158,7 @@ def compute_degradation_ratios(
 
     # Ratio: broadcast baseline across time axis
     ratios = cf.values / cf_baseline[:, np.newaxis]
-    return pd.DataFrame(ratios, index=cf.index.copy(), columns=cf.columns.copy())
+    return pd.DataFrame(ratios, index=cf.index.copy(), columns=years)
 
 
 # Keep old name as alias for backward compatibility in cid_pipeline.py

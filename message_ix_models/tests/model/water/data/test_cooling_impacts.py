@@ -58,7 +58,7 @@ class TestComputeJonesRatios:
         )
 
         gmt = np.array([1.0])
-        ratios = compute_jones_ratios(gmt, baseline_gwl=1.0)
+        ratios = compute_jones_ratios(gmt, [2020], baseline_gwl=1.0)
         np.testing.assert_allclose(ratios.values, 1.0, atol=0.01)
 
     def test_ratio_decreases_with_warming(self):
@@ -67,7 +67,7 @@ class TestComputeJonesRatios:
         )
 
         gmt = np.array([1.0, 2.0, 3.0, 4.0])
-        ratios = compute_jones_ratios(gmt, baseline_gwl=1.0)
+        ratios = compute_jones_ratios(gmt, [2020, 2030, 2040, 2050], baseline_gwl=1.0)
         # CF decreases with warming -> ratios decrease monotonically
         for i in range(12):
             row = ratios.iloc[i].values
@@ -79,7 +79,7 @@ class TestComputeJonesRatios:
         )
 
         gmt = np.linspace(1.0, 3.0, 6)
-        ratios = compute_jones_ratios(gmt)
+        ratios = compute_jones_ratios(gmt, [2020, 2030, 2040, 2050, 2060, 2070])
         assert ratios.shape == (12, 6)
 
 

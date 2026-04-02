@@ -53,23 +53,6 @@ _MJ_MM2_TO_EJ = 1e-6
 # 1 EJ = 1e18 / (1e9 * 365.25 * 24 * 3600) GWa
 _EJ_TO_GWA = 1e18 / (1e9 * 365.25 * 24 * 3600)
 
-_MESSAGE_YEARS = [
-    2020,
-    2025,
-    2030,
-    2035,
-    2040,
-    2045,
-    2050,
-    2055,
-    2060,
-    2070,
-    2080,
-    2090,
-    2100,
-    2110,
-]
-
 _REFERENCE_SCENARIO = "SSP2"
 
 
@@ -275,6 +258,7 @@ def _apply_theta(
 def compute_building_cids(
     gmt_array: np.ndarray,
     years: np.ndarray,
+    model_years: list[int],
     coeff_scenario: str = "S1",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute building energy CIDs from GMT ensemble.
@@ -286,6 +270,9 @@ def compute_building_cids(
         for ensemble averaging or ``(n_years,)`` for single trajectory.
     years
         Year labels corresponding to gmt_array columns.
+    model_years
+        MESSAGE model years from ``ScenarioInfo.Y``. Only positions in
+        *years* that match these are used; 2110 is forward-filled from 2100.
     coeff_scenario
         Correction coefficient scenario ('S1', 'S2', 'S3').
 
@@ -298,15 +285,16 @@ def compute_building_cids(
     gmt_array = np.asarray(gmt_array)
     years = np.asarray(years, dtype=int)
 
-    # Subset to MESSAGE years within input range (exclude 2110 — forward-filled)
-    msg_mask = np.isin(years, [y for y in _MESSAGE_YEARS if y != 2110])
+    # Subset to model years within input range (exclude 2110 — forward-filled)
+    target = [y for y in model_years if y != 2110]
+    msg_mask = np.isin(years, target)
     if not msg_mask.any():
-        raise ValueError(f"No MESSAGE years in input. Years: {years[0]}-{years[-1]}")
+        raise ValueError(f"No model years in input. Years: {years[0]}-{years[-1]}")
     gmt_subset = gmt_array[:, msg_mask] if gmt_array.ndim == 2 else gmt_array[msg_mask]
     msg_years = years[msg_mask].tolist()
 
     log.info(
-        "Computing building CIDs: %s scenario, %d MESSAGE years, GMT shape %s",
+        "Computing building CIDs: %s scenario, %d model years, GMT shape %s",
         coeff_scenario,
         len(msg_years),
         gmt_subset.shape,
@@ -336,8 +324,8 @@ def compute_building_cids(
         )
         total = _apply_theta(total, mode)
 
-        # Forward-fill 2110 from 2100
-        if 2100 in total["year"].values:
+        # Forward-fill 2110 from 2100 if 2110 is a model year
+        if 2110 in model_years and 2100 in total["year"].values:
             total = pd.concat(
                 [total, total[total["year"] == 2100].assign(year=2110)],
                 ignore_index=True,
@@ -353,41 +341,44 @@ def compute_building_cids(
 # ---------------------------------------------------------------------------
 
 
-def apply_building_cids(
-    scen: Scenario,
-    cooling_demand: pd.DataFrame,
-    heating_demand: pd.DataFrame,
-    commit_message: str | None = None,
-) -> None:
-    """Replace the STURM buildings component of rc_spec/rc_therm demands.
+def prepare_building_demand(
+    rc_spec: pd.DataFrame,
+    rc_therm: pd.DataFrame,
+    cooling_cids: pd.DataFrame,
+    heating_cids: pd.DataFrame,
+    fractions: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Replace the STURM buildings component in rc_spec/rc_therm DataFrames.
 
-    Reads sector fractions to identify the buildings share of existing
-    demand, subtracts it (fixed-EI calibration), and adds the
-    climate-responsive RIME-predicted buildings demand.
+    Subtracts the climate-driven fraction (from sector fractions) and adds
+    the RIME-predicted CID demand. Pure data operation — no scenario I/O.
 
     Parameters
     ----------
-    scen
-        MESSAGE scenario (must not be checked out).
-    cooling_demand
+    rc_spec
+        Existing ``demand`` rows for commodity ``rc_spec``.
+    rc_therm
+        Existing ``demand`` rows for commodity ``rc_therm``.
+    cooling_cids
         From ``compute_building_cids`` — columns [node, year, value] in GWa.
-    heating_demand
+    heating_cids
         Same format, heating.
-    commit_message
-        Commit message. Default: "Inject building CIDs".
+    fractions
+        Sector fractions. If *None*, loaded from package data.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        ``(new_rc_spec, new_rc_therm)`` — replacement demand DataFrames
+        with the same columns as the inputs.
     """
-    fractions = load_sector_fractions()
-    demand = scen.par("demand")
+    if fractions is None:
+        fractions = load_sector_fractions()
 
-    rc_spec = demand[demand["commodity"] == "rc_spec"].copy()
-    rc_therm = demand[demand["commodity"] == "rc_therm"].copy()
+    rc_spec = rc_spec.copy()
+    rc_therm = rc_therm.copy()
 
-    assert not rc_spec.empty, "No rc_spec rows in demand — buildings module not built?"
-    assert not rc_therm.empty, (
-        "No rc_therm rows in demand — buildings module not built?"
-    )
-
-    # Merge sector fractions and fill missing with 0 (no climate reduction)
+    # Merge sector fractions; fill missing with 0 (no climate reduction)
     frac_cool_cols = ["node", "year", "frac_resid_cool", "frac_comm_cool"]
     frac_heat_cols = ["node", "year", "frac_resid_heat", "frac_comm_heat"]
     rc_spec = rc_spec.merge(fractions[frac_cool_cols], on=["node", "year"], how="left")
@@ -402,31 +393,70 @@ def apply_building_cids(
         ["frac_resid_heat", "frac_comm_heat"]
     ].fillna(0)
 
-    # Remove climate-driven fraction, add RIME-predicted demand
+    # Subtract climate-driven fraction, add RIME-predicted demand
     rc_spec["value"] *= 1 - rc_spec["frac_resid_cool"] - rc_spec["frac_comm_cool"]
     rc_therm["value"] *= 1 - rc_therm["frac_resid_heat"] - rc_therm["frac_comm_heat"]
 
     rc_spec = rc_spec.merge(
-        cooling_demand.rename(columns={"value": "_cid"}),
+        cooling_cids.rename(columns={"value": "_cid"}),
         on=["node", "year"],
         how="left",
     )
     rc_therm = rc_therm.merge(
-        heating_demand.rename(columns={"value": "_cid"}),
+        heating_cids.rename(columns={"value": "_cid"}),
         on=["node", "year"],
         how="left",
     )
     rc_spec["value"] += rc_spec["_cid"].fillna(0)
     rc_therm["value"] += rc_therm["_cid"].fillna(0)
 
-    # Write to scenario
-    demand_cols = ["node", "commodity", "level", "year", "time", "value", "unit"]
+    # Drop working columns, return clean demand DataFrames
+    demand_cols = [c for c in rc_spec.columns if not c.startswith("frac_") and c != "_cid"]
+    return rc_spec[demand_cols], rc_therm[demand_cols]
+
+
+def apply_building_cids(
+    scen: Scenario,
+    cooling_demand: pd.DataFrame,
+    heating_demand: pd.DataFrame,
+    commit_message: str | None = None,
+) -> None:
+    """Write replacement building demands to scenario.
+
+    Thin wrapper: reads rc_spec/rc_therm, delegates to
+    :func:`prepare_building_demand`, writes back via scenario primitives.
+
+    Parameters
+    ----------
+    scen
+        MESSAGE scenario (must not be checked out).
+    cooling_demand
+        From ``compute_building_cids`` — columns [node, year, value] in GWa.
+    heating_demand
+        Same format, heating.
+    commit_message
+        Commit message. Default: "Inject building CIDs".
+    """
+    demand = scen.par("demand")
+
+    rc_spec = demand[demand["commodity"] == "rc_spec"].copy()
+    rc_therm = demand[demand["commodity"] == "rc_therm"].copy()
+
+    assert not rc_spec.empty, "No rc_spec rows in demand — buildings module not built?"
+    assert not rc_therm.empty, (
+        "No rc_therm rows in demand — buildings module not built?"
+    )
+
+    new_spec, new_therm = prepare_building_demand(
+        rc_spec, rc_therm, cooling_demand, heating_demand
+    )
+
     msg = commit_message or "Inject building CIDs"
     with scen.transact(msg):
         scen.remove_par("demand", demand[demand["commodity"] == "rc_spec"])
-        scen.add_par("demand", rc_spec[demand_cols])
+        scen.add_par("demand", new_spec)
         scen.remove_par("demand", demand[demand["commodity"] == "rc_therm"])
-        scen.add_par("demand", rc_therm[demand_cols])
+        scen.add_par("demand", new_therm)
 
     scen.set_as_default()
     log.info("Building CIDs applied and committed")
