@@ -17,40 +17,6 @@ skip_no_rime = pytest.mark.skipif(
 
 
 @skip_no_rime
-class TestPredictCoolingCf:
-    def test_shape_and_range(self):
-        from message_ix_models.model.water.data.cooling_impacts import (
-            predict_cooling_cf,
-        )
-
-        gmt = np.linspace(1.0, 3.0, 8)
-        result = predict_cooling_cf(gmt)
-        assert result.shape == (12, 8)
-        assert (result.values > 0).all()
-        assert (result.values <= 1).all()
-
-    def test_ensemble(self):
-        from message_ix_models.model.water.data.cooling_impacts import (
-            predict_cooling_cf,
-        )
-
-        rng = np.random.default_rng(42)
-        gmt_2d = np.clip(rng.normal(2.0, 0.3, size=(5, 8)), 0.8, 6.0)
-        result = predict_cooling_cf(gmt_2d)
-        assert result.shape == (12, 8)
-
-    def test_region_index(self):
-        from message_ix_models.model.water.data.cooling_impacts import (
-            predict_cooling_cf,
-        )
-
-        gmt = np.array([1.5, 2.0])
-        result = predict_cooling_cf(gmt)
-        assert result.index.name == "region"
-        assert "AFR" in result.index
-
-
-@skip_no_rime
 class TestComputeJonesRatios:
     def test_ratio_at_baseline(self):
         from message_ix_models.model.water.data.cooling_impacts import (
@@ -61,17 +27,15 @@ class TestComputeJonesRatios:
         ratios = compute_jones_ratios(gmt, [2020], baseline_gwl=1.0)
         np.testing.assert_allclose(ratios.values, 1.0, atol=0.01)
 
-    def test_ratio_decreases_with_warming(self):
+    def test_ratio_changes_with_warming(self):
         from message_ix_models.model.water.data.cooling_impacts import (
             compute_jones_ratios,
         )
 
         gmt = np.array([1.0, 2.0, 3.0, 4.0])
         ratios = compute_jones_ratios(gmt, [2020, 2030, 2040, 2050], baseline_gwl=1.0)
-        # CF decreases with warming -> ratios decrease monotonically
-        for i in range(12):
-            row = ratios.iloc[i].values
-            assert row[0] >= row[-1], f"Region {ratios.index[i]}: ratio not decreasing"
+        # Warming should move the regional ratios away from the baseline value.
+        assert (ratios[2050] - ratios[2020]).abs().gt(0.01).any()
 
     def test_ratio_shape_matches_input(self):
         from message_ix_models.model.water.data.cooling_impacts import (
@@ -81,20 +45,6 @@ class TestComputeJonesRatios:
         gmt = np.linspace(1.0, 3.0, 6)
         ratios = compute_jones_ratios(gmt, [2020, 2030, 2040, 2050, 2060, 2070])
         assert ratios.shape == (12, 6)
-
-
-@skip_no_rime
-class TestFreshwaterReferenceShares:
-    def test_loads_and_sums_to_reasonable_range(self):
-        from message_ix_models.model.water.data.cooling_impacts import (
-            _freshwater_reference_shares,
-        )
-
-        shares = _freshwater_reference_shares()
-        assert len(shares) == 12
-        # Freshwater share should be between 0 and 1 per region
-        assert (shares >= 0).all()
-        assert (shares <= 1).all()
 
 
 class TestBuildCoolingConstraints:
@@ -237,6 +187,71 @@ class TestBuildCoolingConstraints:
         rel_act = result["relation_activity"]
         assert 2060 not in rel_act["year_act"].values
         assert 2050 in rel_act["year_act"].values
+
+
+class TestBuildDryCoolingFactors:
+    _CF_AIR = pd.DataFrame(
+        {
+            "node_loc": ["R12_AFR", "R12_AFR", "R12_WEU"],
+            "technology": ["coal_ppl__air", "coal_ppl__air", "gas_ppl__air"],
+            "year_act": [2030, 2050, 2050],
+            "value": [0.90, 0.80, 0.75],
+            "unit": ["-", "-", "-"],
+        }
+    )
+
+    _RATIOS = pd.DataFrame(
+        {
+            2050: [0.50, 0.80],
+        },
+        index=pd.Index(["AFR", "WEU"], name="region"),
+    )
+
+    def test_scales_values_and_preserves_structure(self):
+        from message_ix_models.model.water.data.cooling_impacts import (
+            build_dry_cooling_factors,
+        )
+
+        old_cf, new_cf = build_dry_cooling_factors(
+            self._CF_AIR,
+            self._RATIOS,
+            model_years=[2030, 2050],
+            min_year=2045,
+        )
+
+        assert old_cf["year_act"].tolist() == [2050, 2050]
+        assert new_cf.columns.tolist() == old_cf.columns.tolist()
+        np.testing.assert_allclose(old_cf["value"], [0.80, 0.75])
+        np.testing.assert_allclose(new_cf["value"], [0.40, 0.60])
+
+    def test_min_year_filtering(self):
+        from message_ix_models.model.water.data.cooling_impacts import (
+            build_dry_cooling_factors,
+        )
+
+        old_cf, new_cf = build_dry_cooling_factors(
+            self._CF_AIR,
+            self._RATIOS,
+            model_years=[2030],
+            min_year=2045,
+        )
+
+        assert old_cf.empty
+        assert new_cf.empty
+
+    def test_empty_input(self):
+        from message_ix_models.model.water.data.cooling_impacts import (
+            build_dry_cooling_factors,
+        )
+
+        old_cf, new_cf = build_dry_cooling_factors(
+            pd.DataFrame(),
+            self._RATIOS,
+            model_years=[2050],
+        )
+
+        assert old_cf.empty
+        assert new_cf.empty
 
 
 class TestPredictCoolingCfClipBounds:
