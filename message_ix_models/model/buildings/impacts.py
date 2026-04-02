@@ -6,17 +6,33 @@ held energy intensity (EI) fixed over the horizon — no climate response.
 This module replaces that fixed-EI buildings component with a
 climate-responsive version using RIME-predicted EI.
 
-Sector fractions (beta) identify what share of rc_spec/rc_therm is the
-STURM buildings component. We subtract it (the fixed-EI calibration) and
-add:
+Two calibration layers connect RIME emulator output to scenario demand:
 
-    E(t,r,a) = theta(r,t) * gamma(r,a) * EI(r,a, GSAT(t)) * F(t,r,a)
+**Beta** (sector fractions) — the share of aggregate rc_spec/rc_therm
+that is the STURM buildings component::
+
+    beta_cool(r,t) = buildings_cooling(r,t) / rc_spec(r,t)
+
+Computed from Setu's calibrated baseline per SSP. Used to subtract the
+fixed-EI buildings component before adding the climate-responsive one.
+
+**Theta** — bridges the gap between raw RIME-reconstructed demand and
+the calibrated STURM demand sitting in MESSAGE::
+
+    theta(r,t) = [beta(r,t) * rc_{spec,therm}(r,t)] / [gamma * EI(GWL=1.1) * F](r,t)
+
+At present-day climate (GWL ~1.1), theta * raw reproduces the calibrated
+demand exactly. Under warming, theta carries the calibration shape while
+EI responds to climate. Theta absorbs both the RIME→STURM calibration
+correction and the SSP-specific demand level (because F is SSP-agnostic).
+
+The replacement demand is::
+
+    E(t,r) = theta(r,t) * gamma(r,a) * EI(r,a, GSAT(t)) * F(r,a,t)
 
 Where gamma is the correction coefficient (calibrated at GWL=1.2 to
 match STURM at reference climate), EI is the CHILLED energy intensity
-from RIME emulators (MJ/m2), F is the STURM floor area (Mm2), and theta
-bridges the gap between raw RIME output and calibrated STURM demand in
-MESSAGE (see ``_apply_theta``).
+from RIME emulators (MJ/m2), and F is the STURM floor area (Mm2).
 
 Sector fraction transferability across policy scenarios
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -295,10 +311,12 @@ def _apply_theta(
     mode: Literal["cool", "heat"],
     reference_scenario: str = _REFERENCE_SCENARIO,
 ) -> pd.DataFrame:
-    """Scale raw RIME demand by theta(node, year) from the reference scenario.
+    """Scale raw RIME demand by theta to match SSP-calibrated STURM levels.
 
-    Theta tables are stored at source resolution (decadal + 2025). This
-    interpolates linearly to match the demand years before applying.
+    Theta = calibrated / raw at GWL 1.1; it carries the calibration shape
+    under warming while EI provides the climate response. Stored at source
+    resolution (decadal + 2025); interpolated to demand years. The theta
+    min year defines the CID validity range — years before it are excluded.
     """
     theta = load_theta(mode, reference_scenario)
     demand_years = sorted(demand["year"].unique())
