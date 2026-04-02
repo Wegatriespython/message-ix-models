@@ -263,13 +263,44 @@ def _compute_sector_energy(
     return merged.groupby(["region", "year"], as_index=False)["value"].sum()
 
 
+def _interpolate_to_years(
+    df: pd.DataFrame,
+    target_years: list[int],
+    value_cols: list[str],
+    group_col: str = "node",
+) -> pd.DataFrame:
+    """Linearly interpolate a (node, year, ...) DataFrame to target years.
+
+    Source data may be at decadal resolution; this fills 5-year intermediate
+    steps, back-fills before the first source year, and forward-fills beyond
+    the last.
+    """
+    parts = []
+    for node, grp in df.groupby(group_col):
+        grp = grp.set_index("year").sort_index()
+        idx = pd.Index(sorted(set(grp.index) | set(target_years)), name="year")
+        grp = grp.reindex(idx)
+        for col in value_cols:
+            grp[col] = grp[col].interpolate(method="index").bfill().ffill()
+        grp[group_col] = node
+        parts.append(grp.loc[grp.index.isin(target_years)].reset_index())
+    return pd.concat(parts, ignore_index=True)
+
+
 def _apply_theta(
     demand: pd.DataFrame,
     mode: Literal["cool", "heat"],
     reference_scenario: str = _REFERENCE_SCENARIO,
 ) -> pd.DataFrame:
-    """Scale raw RIME demand by theta(node, year) from the reference scenario."""
+    """Scale raw RIME demand by theta(node, year) from the reference scenario.
+
+    Theta tables are stored at source resolution (decadal + 2025). This
+    interpolates linearly to match the demand years before applying.
+    """
     theta = load_theta(mode, reference_scenario)
+    demand_years = sorted(demand["year"].unique())
+    theta = _interpolate_to_years(theta, demand_years, ["theta"])
+
     scaled = demand.merge(theta, on=["node", "year"], how="left")
 
     missing = scaled.loc[scaled["theta"].isna(), ["node", "year"]]
@@ -414,20 +445,24 @@ def prepare_building_demand(
     rc_spec = rc_spec.copy()
     rc_therm = rc_therm.copy()
 
-    # Merge sector fractions; fill missing with 0 (no climate reduction)
-    frac_cool_cols = ["node", "year", "frac_resid_cool", "frac_comm_cool"]
-    frac_heat_cols = ["node", "year", "frac_resid_heat", "frac_comm_heat"]
-    rc_spec = rc_spec.merge(fractions[frac_cool_cols], on=["node", "year"], how="left")
-    rc_therm = rc_therm.merge(
-        fractions[frac_heat_cols], on=["node", "year"], how="left"
+    # Interpolate fractions to demand years (source data is decadal)
+    demand_years = sorted(set(rc_spec["year"].unique()) | set(rc_therm["year"].unique()))
+    frac_cool_cols = ["frac_resid_cool", "frac_comm_cool"]
+    frac_heat_cols = ["frac_resid_heat", "frac_comm_heat"]
+    fractions = _interpolate_to_years(
+        fractions, demand_years, frac_cool_cols + frac_heat_cols
     )
 
-    rc_spec[["frac_resid_cool", "frac_comm_cool"]] = rc_spec[
-        ["frac_resid_cool", "frac_comm_cool"]
-    ].fillna(0)
-    rc_therm[["frac_resid_heat", "frac_comm_heat"]] = rc_therm[
-        ["frac_resid_heat", "frac_comm_heat"]
-    ].fillna(0)
+    rc_spec = rc_spec.merge(
+        fractions[["node", "year"] + frac_cool_cols], on=["node", "year"], how="left"
+    )
+    rc_therm = rc_therm.merge(
+        fractions[["node", "year"] + frac_heat_cols], on=["node", "year"], how="left"
+    )
+
+    # Years before fraction coverage (e.g. 2020) get 0 — no climate reduction
+    rc_spec[frac_cool_cols] = rc_spec[frac_cool_cols].fillna(0)
+    rc_therm[frac_heat_cols] = rc_therm[frac_heat_cols].fillna(0)
 
     # Subtract climate-driven fraction, add RIME-predicted demand
     rc_spec["value"] *= 1 - rc_spec["frac_resid_cool"] - rc_spec["frac_comm_cool"]
