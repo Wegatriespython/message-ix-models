@@ -6,14 +6,38 @@ held energy intensity (EI) fixed over the horizon — no climate response.
 This module replaces that fixed-EI buildings component with a
 climate-responsive version using RIME-predicted EI.
 
-Sector fractions identify what share of rc_spec/rc_therm is the STURM
-buildings component. We subtract it (the fixed-EI calibration) and add:
+Sector fractions (beta) identify what share of rc_spec/rc_therm is the
+STURM buildings component. We subtract it (the fixed-EI calibration) and
+add:
 
-    E(t,r,a) = gamma(r,a) * EI(r,a, GSAT(t)) * F(t,r,a)
+    E(t,r,a) = theta(r,t) * gamma(r,a) * EI(r,a, GSAT(t)) * F(t,r,a)
 
 Where gamma is the correction coefficient (calibrated at GWL=1.2 to
 match STURM at reference climate), EI is the CHILLED energy intensity
-from RIME emulators (MJ/m2), and F is the STURM floor area (Mm2).
+from RIME emulators (MJ/m2), F is the STURM floor area (Mm2), and theta
+bridges the gap between raw RIME output and calibrated STURM demand in
+MESSAGE (see ``_apply_theta``).
+
+Sector fraction transferability across policy scenarios
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Beta is computed from the SSP baseline scenario (e.g. SSP2 baseline) but
+applied to policy variants (NPiREF, INDC_600) whose rc_spec trajectories
+differ due to MESSAGE-MACRO demand response. This is valid when MACRO's
+demand adjustment is compositionally neutral: MACRO sees rc_spec as an
+aggregate useful energy demand and scales it via CES price-elasticity. It
+has no visibility into the decomposition of rc_spec into buildings vs
+non-buildings components. If MACRO scales rc_spec by factor k, both
+numerator (buildings cooling) and denominator (rc_spec) scale by k, so
+beta = buildings/rc_spec is invariant.
+
+This holds when the RES structure (which technologies contribute to
+rc_spec) is identical across policy variants within an SSP — i.e. only
+activity levels and costs change, not the technology set. If a policy
+scenario were to add or remove technologies consuming rc_spec, the
+composition would change and beta from baseline would be incorrect.
+
+Empirical validation: compare beta from baseline vs NPiREF for SSP2 to
+confirm the ratio is ~1.0 across regions and years.
 
 Ensemble averaging: callers pass a 2D GMT array (n_runs, n_years) from
 MAGICC. ``predict_rime`` evaluates EI at each ensemble member's GMT and
@@ -85,9 +109,14 @@ def load_correction_coefficients(
     return pd.read_csv(path, comment="#")
 
 
-def load_sector_fractions() -> pd.DataFrame:
-    """Load SSP2 sector fractions of rc_spec/rc_therm per (node, year)."""
-    return pd.read_csv(_buildings_data_path("rc_sector_fractions.csv"), comment="#")
+def load_sector_fractions(
+    reference_scenario: str = _REFERENCE_SCENARIO,
+) -> pd.DataFrame:
+    """Load sector fractions of rc_spec/rc_therm per (node, year)."""
+    return pd.read_csv(
+        _buildings_data_path(f"rc_sector_fractions_{reference_scenario}.csv"),
+        comment="#",
+    )
 
 
 def load_floor_areas(sector: Literal["resid", "comm"] = "resid") -> pd.DataFrame:
@@ -260,6 +289,7 @@ def compute_building_cids(
     years: np.ndarray,
     model_years: list[int],
     coeff_scenario: str = "S1",
+    reference_scenario: str = _REFERENCE_SCENARIO,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute building energy CIDs from GMT ensemble.
 
@@ -275,6 +305,8 @@ def compute_building_cids(
         *years* that match these are used; 2110 is forward-filled from 2100.
     coeff_scenario
         Correction coefficient scenario ('S1', 'S2', 'S3').
+    reference_scenario
+        SSP scenario for theta and sector fractions ('SSP2', 'SSP3').
 
     Returns
     -------
@@ -322,7 +354,7 @@ def compute_building_cids(
                 value=lambda df: df["value"] * _EJ_TO_GWA,
             )[["node", "year", "value"]]
         )
-        total = _apply_theta(total, mode)
+        total = _apply_theta(total, mode, reference_scenario)
 
         # Forward-fill 2110 from 2100 if 2110 is a model year
         if 2110 in model_years and 2100 in total["year"].values:
@@ -347,6 +379,7 @@ def prepare_building_demand(
     cooling_cids: pd.DataFrame,
     heating_cids: pd.DataFrame,
     fractions: pd.DataFrame | None = None,
+    reference_scenario: str = _REFERENCE_SCENARIO,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Replace the STURM buildings component in rc_spec/rc_therm DataFrames.
 
@@ -364,7 +397,10 @@ def prepare_building_demand(
     heating_cids
         Same format, heating.
     fractions
-        Sector fractions. If *None*, loaded from package data.
+        Sector fractions. If *None*, loaded from package data for
+        *reference_scenario*.
+    reference_scenario
+        SSP scenario for sector fractions ('SSP2', 'SSP3').
 
     Returns
     -------
@@ -373,7 +409,7 @@ def prepare_building_demand(
         with the same columns as the inputs.
     """
     if fractions is None:
-        fractions = load_sector_fractions()
+        fractions = load_sector_fractions(reference_scenario)
 
     rc_spec = rc_spec.copy()
     rc_therm = rc_therm.copy()
@@ -420,6 +456,7 @@ def apply_building_cids(
     cooling_demand: pd.DataFrame,
     heating_demand: pd.DataFrame,
     commit_message: str | None = None,
+    reference_scenario: str = _REFERENCE_SCENARIO,
 ) -> None:
     """Write replacement building demands to scenario.
 
@@ -436,6 +473,8 @@ def apply_building_cids(
         Same format, heating.
     commit_message
         Commit message. Default: "Inject building CIDs".
+    reference_scenario
+        SSP scenario for sector fractions ('SSP2', 'SSP3').
     """
     demand = scen.par("demand")
 
@@ -448,7 +487,8 @@ def apply_building_cids(
     )
 
     new_spec, new_therm = prepare_building_demand(
-        rc_spec, rc_therm, cooling_demand, heating_demand
+        rc_spec, rc_therm, cooling_demand, heating_demand,
+        reference_scenario=reference_scenario,
     )
 
     msg = commit_message or "Inject building CIDs"
