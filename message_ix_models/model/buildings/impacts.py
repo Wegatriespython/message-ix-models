@@ -272,18 +272,21 @@ def _interpolate_to_years(
     """Linearly interpolate a (node, year, ...) DataFrame to target years.
 
     Source data may be at decadal resolution; this fills 5-year intermediate
-    steps, back-fills before the first source year, and forward-fills beyond
-    the last.
+    steps and forward-fills beyond the last source year. Years before the
+    first source year are excluded — the source data's range defines where
+    the output is valid.
     """
     parts = []
     for node, grp in df.groupby(group_col):
         grp = grp.set_index("year").sort_index()
-        idx = pd.Index(sorted(set(grp.index) | set(target_years)), name="year")
+        src_min = grp.index.min()
+        valid_targets = [y for y in target_years if y >= src_min]
+        idx = pd.Index(sorted(set(grp.index) | set(valid_targets)), name="year")
         grp = grp.reindex(idx)
         for col in value_cols:
-            grp[col] = grp[col].interpolate(method="index").bfill().ffill()
+            grp[col] = grp[col].interpolate(method="index").ffill()
         grp[group_col] = node
-        parts.append(grp.loc[grp.index.isin(target_years)].reset_index())
+        parts.append(grp.loc[grp.index.isin(valid_targets)].reset_index())
     return pd.concat(parts, ignore_index=True)
 
 
@@ -348,8 +351,13 @@ def compute_building_cids(
     gmt_array = np.asarray(gmt_array)
     years = np.asarray(years, dtype=int)
 
-    # Subset to model years within input range (exclude 2110 — forward-filled)
-    target = [y for y in model_years if y != 2110]
+    # CID year range: from theta coverage (excludes historical years)
+    # through model horizon, with 2110 forward-filled from 2100.
+    theta_min_year = min(
+        load_theta("cool", reference_scenario)["year"].min(),
+        load_theta("heat", reference_scenario)["year"].min(),
+    )
+    target = [y for y in model_years if y != 2110 and y >= theta_min_year]
     msg_mask = np.isin(years, target)
     if not msg_mask.any():
         raise ValueError(f"No model years in input. Years: {years[0]}-{years[-1]}")
