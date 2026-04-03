@@ -170,10 +170,20 @@ def nexus_cli(
         context.num_basins = num_basins
     context.basin_selection = basin_selection
 
-    nexus(context, regions, rcps, sdgs, rels, macro)
+    nexus(context, regions, rcps, sdgs, rels, macro, solve=False)
 
 
-def nexus(context: "Context", regions, rcps, sdgs, rels, macro=False):
+def nexus(
+    context: "Context",
+    regions,
+    rcps,
+    sdgs,
+    rels,
+    macro: bool = False,
+    solve: bool = True,
+    clone: bool = True,
+    scen: "Scenario | None" = None,
+):
     """Add basin structure connected to the energy sector and
     water balance linking different water demands to supply.
 
@@ -210,35 +220,44 @@ def nexus(context: "Context", regions, rcps, sdgs, rels, macro=False):
 
     # Determine the output scenario name based on the --url CLI option. If the
     # user did not give a recognized value, this raises an error
-    output_scenario_name = context.output_scenario + "_nexus"
-    output_model_name = context.output_model
+    caseName = ""
+    if clone is True:
+        output_scenario_name = context.output_scenario + "_nexus"
+        output_model_name = context.output_model
 
-    # Clone and build
-    sc_ref = context.get_scenario()
-    scen = sc_ref.clone(
-        model=output_model_name, scenario=output_scenario_name, keep_solution=False
-    )
-    log.info(
-        f" clone from {sc_ref.model}.{sc_ref.scenario} to {scen.model}.{scen.scenario}"
-    )
-    # Exporting the built model (Scenario) to GAMS with an optional case name
-    caseName = scen.model + "__" + scen.scenario + "__v" + str(scen.version)
+        # Clone and build
+        sc_ref = context.get_scenario()
+        scen = sc_ref.clone(
+            model=output_model_name, scenario=output_scenario_name, keep_solution=False
+        )
+        log.info(
+            f" clone from {sc_ref.model}.{sc_ref.scenario} to "
+            f"{scen.model}.{scen.scenario}"
+        )
+        # Exporting the built model (Scenario) to GAMS with an optional case name
+        caseName = scen.model + "__" + scen.scenario + "__v" + str(scen.version)
+    else:
+        if scen is None:
+            scen = context.get_scenario()
+        assert scen is not None, "No scenario provided and none in context"
 
     # Build
     build(context, scen)
 
-    # Set scenario as default
-    scen.set_as_default()
+    if clone:
+        # Set scenario as default
+        scen.set_as_default()
 
-    # Solve
-    if macro:
-        scen.solve(
-            model="MESSAGE-MACRO",
-            solve_options={"lpmethod": "4", "scaind": "1"},
-            case=caseName,
-        )
-    else:
-        scen.solve(solve_options={"lpmethod": "4", "scaind": "1"}, case=caseName)
+    if solve:
+        # Solve
+        if macro:
+            scen.solve(
+                model="MESSAGE-MACRO",
+                solve_options={"lpmethod": "4", "scaind": "1"},
+                case=caseName,
+            )
+        else:
+            scen.solve(solve_options={"lpmethod": "4", "scaind": "1"}, case=caseName)
 
     # if options["report"]:
     #     # Also output diagnostic reports

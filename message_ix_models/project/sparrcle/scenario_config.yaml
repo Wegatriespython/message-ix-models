@@ -1,0 +1,95 @@
+# SPARRCLE Scenario Configuration
+#
+# Two independent phases, each with selectable steps:
+#
+# Phase 1 — Module builds (scenario_generator.build_scenario):
+#   cooling: Clone starter → build cooling module → {starter}_cooling
+#   nexus:   Clone cooling → build water/nexus    → {starter}_cooling_nexus
+#
+# Phase 2 — CID pipeline (scenario_generator.run_cid / _staging/cid_pipeline.py):
+#   buildings: rc_spec/rc_therm demand adjustment → _CI_build
+#   cooling:   freshwater + dry cooling constraints → _CI_PP
+#   water:     surface/groundwater availability replacement (in-place on _CI_PP)
+#   Final clone as CurrentPolicies_BioImpact.
+#
+# Phase 2 input depends on which CID steps are selected:
+#   buildings + cooling → _cooling is sufficient
+#   buildings + cooling + water → _cooling_nexus required
+
+platform_info:
+  name: ixmp_dev
+  jvmargs: "-Xmx16G"
+
+# Starter scenarios — assumed to exist on ixmp_dev.
+# One entry per SSP; scenario_generator iterates over the list.
+starters:
+  - model: SSP_SSP2_v6.5_sp
+    scenario: NPiREF_CI_0
+    ssp: SSP2
+    # MAGICC 600-member GMT ensemble for CID pipeline (step 3)
+    # Directory must contain *_IAMC_climateassessment.xlsx
+    magicc_output_dir: _staging/magicc_output/SSP_SSP2_v6.5_sp__NPiREF_CI_0
+  - model: SSP_SSP3_v6.5_sp
+    scenario: NPiREF_CI_0
+    ssp: SSP3
+    magicc_output_dir: _staging/magicc_output/SSP_SSP3_v6.5_sp__NPiREF_CI_0
+
+# Output naming: module build appends suffixes to starter scenario name
+# e.g. NPiREF_CI_0 → NPiREF_CI_0_cooling → NPiREF_CI_0_cooling_nexus
+output:
+  cooling_suffix: "_cooling"
+  nexus_suffix: "_nexus"
+
+# --- CID pipeline settings (step 3) ---
+cid:
+  steps: [buildings, cooling, water]
+  # n_runs: null means use all available ensemble members
+  n_runs: null
+  # Buildings CID coefficient scenario
+  coeff_scenario: S1
+
+# --- Cooling module build settings ---
+cooling:
+  rcps: no_climate
+  rels: low
+
+# --- Water/nexus module build settings ---
+nexus:
+  rcps: no_climate
+  rels: low
+  sdgs: baseline
+  # Reduced basin set: all Europe basins + 1 per non-European region
+  reduced_basin: true
+  num_basins: 1
+  basin_selection: first_k
+  # All WEU + EEU basins added on top of the 1-per-region automatic selection
+  filter_list:
+    # EEU (4 basins)
+    - "0|EEU"
+    - "39|EEU"
+    - "48|EEU"
+    - "106|EEU"
+    # WEU (23 basins)
+    - "0|WEU"
+    - "4|WEU"
+    - "16|WEU"
+    - "26|WEU"
+    - "31|WEU"
+    - "39|WEU"
+    - "41|WEU"
+    - "45|WEU"
+    - "47|WEU"
+    - "48|WEU"
+    - "49|WEU"
+    - "51|WEU"
+    - "64|WEU"
+    - "68|WEU"
+    - "85|WEU"
+    - "86|WEU"
+    - "106|WEU"
+    - "119|WEU"
+    - "127|WEU"
+    - "128|WEU"
+    - "145|WEU"
+    - "150|WEU"
+    - "151|WEU"
