@@ -291,7 +291,7 @@ def nexus(
 @click.pass_obj
 def cooling_cli(context, regions, rcps, rels):
     """Build and solve model with new cooling technologies."""
-    cooling(context, regions, rcps, rels)
+    cooling(context, regions, rcps, rels, solve=False)
 
 
 def cooling(
