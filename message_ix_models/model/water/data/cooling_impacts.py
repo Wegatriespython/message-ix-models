@@ -230,12 +230,32 @@ def _read_cooling_structure(
     return pd.DataFrame(rows)
 
 
+def _max_vintage_from_lifetime(
+    tl: pd.DataFrame,
+) -> dict[tuple[str, str], int]:
+    """Last vintage year with ``technical_lifetime`` defined, per (node, tech).
+
+    GAMS evaluates ``relation_activity`` by iterating all model years
+    ``<= year_act`` as candidate vintages.  If a candidate vintage has no
+    ``technical_lifetime`` row, compilation fails ("Technical lifetime not
+    defined for node|tech|year").  The safe bound for ``year_act`` is
+    therefore ``max(year_vtg)`` where ``technical_lifetime`` is defined —
+    any ``year_act`` beyond that will cause GAMS to probe a vintage year
+    with no lifetime entry.
+    """
+    return {
+        (node, tech): int(grp["year_vtg"].max())
+        for (node, tech), grp in tl.groupby(["node_loc", "technology"])
+    }
+
+
 def build_cooling_constraints(
     addon_df: pd.DataFrame,
     technologies: set[str],
     jones_ratios: pd.DataFrame,
     model_years: list[int] | None = None,
     min_year: int = _DEFAULT_MIN_YEAR,
+    technical_lifetime: pd.DataFrame | None = None,
 ) -> dict:
     """Build ``relation_activity`` and ``relation_upper`` for Jones constraints.
 
@@ -252,6 +272,12 @@ def build_cooling_constraints(
         Which years to constrain. If *None*, uses jones_ratios columns.
     min_year
         Earliest year for constraints. Default 2045.
+    technical_lifetime
+        The ``technical_lifetime`` parameter DataFrame. When provided,
+        ``relation_activity`` rows are only emitted for ``year_act`` values
+        where the parent tech has active vintage capacity.  Without this,
+        phase-out techs (e.g. ``coal_ppl_u``) produce GAMS errors:
+        "Technical lifetime not defined for node|tech|year".
 
     Returns
     -------
@@ -276,9 +302,17 @@ def build_cooling_constraints(
             "relation_names": [],
         }
 
+    # Max vintage per (node, tech) — year_act beyond this triggers GAMS error
+    max_vtg = (
+        _max_vintage_from_lifetime(technical_lifetime)
+        if technical_lifetime is not None
+        else None
+    )
+
     rel_act_rows = []
     rel_up_rows = []
     relation_names = set()
+    n_skipped = 0
 
     # Group by parent tech — one relation per parent type
     for parent_tech, group in structure.groupby("parent_tech"):
@@ -296,7 +330,19 @@ def build_cooling_constraints(
                 continue
             share = float(s_ref[region_short])
 
+            # Last vintage year with technical_lifetime defined
+            vtg_cap = (
+                max_vtg.get((node, parent_tech))
+                if max_vtg is not None
+                else None
+            )
+
             for year in constrained_years:
+                # Skip if year_act exceeds last defined vintage
+                if vtg_cap is not None and year > vtg_cap:
+                    n_skipped += 1
+                    continue
+
                 # Jones ratio for this region-year
                 if region_short not in jones_ratios.index:
                     continue
@@ -357,9 +403,10 @@ def build_cooling_constraints(
     n_entries = len(rel_act)
     log.info(
         "Built Jones cooling constraints: %d relations, %d relation_activity entries, "
-        "years %d-%d",
+        "%d skipped (no active vintage), years %d-%d",
         n_parents,
         n_entries,
+        n_skipped,
         min(constrained_years),
         max(constrained_years),
     )
