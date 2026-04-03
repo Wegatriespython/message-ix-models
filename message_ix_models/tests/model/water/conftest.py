@@ -21,9 +21,20 @@ def water_params(region, *, reduced_basin=False, **extra):
     Encodes the region→type_reg mapping once. When *reduced_basin* is True,
     adds ``first_k`` selection with ``num_basins=2`` (24 basins total).
     """
-    base = {**REGION_CONFIG[region]}
+    base = {**REGION_CONFIG[region], "ssp": "SSP2"}
     if reduced_basin:
-        base.update(reduced_basin=True, basin_selection="first_k", num_basins=2)
+        base.update(
+            reduced_basin=True,
+            basin_selection="first_k",
+            num_basins=1,
+            filter_list=[
+                "0|EEU", "39|EEU", "48|EEU", "106|EEU",
+                "0|WEU", "4|WEU", "16|WEU", "26|WEU", "31|WEU", "39|WEU",
+                "41|WEU", "45|WEU", "47|WEU", "48|WEU", "49|WEU", "51|WEU",
+                "64|WEU", "68|WEU", "85|WEU", "86|WEU", "106|WEU", "119|WEU",
+                "127|WEU", "128|WEU", "145|WEU", "150|WEU", "151|WEU",
+            ],
+        )
     base.update(extra)
     return base
 

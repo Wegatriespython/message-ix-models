@@ -220,6 +220,9 @@ def add_sectoral_demands(context: "Context") -> dict[str, pd.DataFrame]:
 
     df_dmds["time"] = "year"
 
+    # Drop NaN values introduced by xarray combine_first across mismatched basins
+    df_dmds = df_dmds.dropna(subset=["value"])
+
     # Filter to only include basins that exist after basin filtering
     df_dmds = df_dmds[df_dmds["node"].isin(context.valid_basins)]
 
