@@ -47,6 +47,8 @@ dependencies = [
   "sdmx1 >= 2.22.0",
   "tqdm",
   "pyxlsb >= 1.0.10",
+  "plotnine>=0.15.3",
+  "netcdf4>=1.7.3",
 ]
 
 [project.urls]
