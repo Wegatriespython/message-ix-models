@@ -34,7 +34,13 @@ from message_ix_models.util import package_data_path
 
 from .climate import GmtArray, gmt_ensemble, gmt_expectation
 from .rime import check_emulator_linearity, clip_gmt, predict_rime
-from .risk import cvar_coherent, cvar_pointwise
+from .risk import (
+    ReductionMode,
+    cvar_coherent,
+    cvar_pointwise,
+    joint_at_quantile,
+    predict_with_reduction,
+)
 from .temporal import sample_to_model_years
 
 impacts_data_path = partial(package_data_path, "impacts")
@@ -42,6 +48,7 @@ impacts_data_path = partial(package_data_path, "impacts")
 
 __all__ = [
     "GmtArray",
+    "ReductionMode",
     "check_emulator_linearity",
     "clip_gmt",
     "cvar_coherent",
@@ -49,6 +56,8 @@ __all__ = [
     "gmt_ensemble",
     "gmt_expectation",
     "impacts_data_path",
+    "joint_at_quantile",
     "predict_rime",
+    "predict_with_reduction",
     "sample_to_model_years",
 ]

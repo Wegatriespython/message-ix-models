@@ -77,9 +77,10 @@ import xarray as xr
 from message_ix import Scenario
 
 from message_ix_models.tools.impacts import (
+    ReductionMode,
     clip_gmt,
     impacts_data_path,
-    predict_rime,
+    predict_with_reduction,
 )
 from message_ix_models.util import package_data_path
 
@@ -157,14 +158,20 @@ def load_theta(
 def predict_building_ei(
     gmt_array: np.ndarray,
     mode: Literal["cool", "heat"],
+    reduction: ReductionMode = "mean",
 ) -> np.ndarray:
-    """Predict E[EI(GMT)] at native RIME resolution.
+    """Predict EI at native RIME resolution under the requested ensemble reduction.
 
     Parameters
     ----------
     gmt_array
         Shape ``(n_runs, n_years)`` for ensemble or ``(n_years,)`` for single
         trajectory.
+    mode
+        ``"cool"`` or ``"heat"``.
+    reduction
+        How to reduce the (MAGICC, RIME-source) ensemble pair into a per-cell
+        EI. See :data:`message_ix_models.tools.impacts.ReductionMode`.
 
     Returns
     -------
@@ -173,7 +180,9 @@ def predict_building_ei(
     """
     dataset_path = str(impacts_data_path("rime", f"region_EI_{mode}_gwl_binned.nc"))
     gmt_clipped = clip_gmt(gmt_array, gmt_min=0.6, gmt_ceil=0.9)
-    return predict_rime(gmt_clipped, dataset_path, f"EI_{mode}", aggregate="mean")
+    return predict_with_reduction(
+        gmt_clipped, dataset_path, f"EI_{mode}", reduction=reduction
+    )
 
 
 def _ei_to_dataframe(
@@ -342,6 +351,7 @@ def compute_building_cids(
     model_years: list[int],
     coeff_scenario: str = "S1",
     reference_scenario: str = _REFERENCE_SCENARIO,
+    reduction: ReductionMode = "mean",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute building energy CIDs from GMT ensemble.
 
@@ -349,7 +359,7 @@ def compute_building_cids(
     ----------
     gmt_array
         GMT values (degC above pre-industrial). Shape ``(n_runs, n_years)``
-        for ensemble averaging or ``(n_years,)`` for single trajectory.
+        for ensemble or ``(n_years,)`` for single trajectory.
     years
         Year labels corresponding to gmt_array columns.
     model_years
@@ -359,6 +369,9 @@ def compute_building_cids(
         Correction coefficient scenario ('S1', 'S2', 'S3').
     reference_scenario
         SSP scenario for theta and sector fractions ('SSP2', 'SSP3').
+    reduction
+        How to reduce the (MAGICC, RIME-source) ensemble pair when predicting
+        EI. Forwarded to :func:`predict_building_ei`.
 
     Returns
     -------
@@ -394,7 +407,7 @@ def compute_building_cids(
 
     results = {}
     for mode in ("cool", "heat"):
-        ei_all = predict_building_ei(gmt_subset, mode)
+        ei_all = predict_building_ei(gmt_subset, mode, reduction=reduction)
         ds = _load_ei_dataset(mode)
         ei_df = _ei_to_dataframe(ei_all, ds, msg_years)
         mfh_ei_df = _mfh_weighted_ei(ei_df, resid_floor)

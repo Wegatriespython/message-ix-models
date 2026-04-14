@@ -28,9 +28,10 @@ import numpy as np
 import pandas as pd
 
 from message_ix_models.tools.impacts import (
+    ReductionMode,
     clip_gmt,
     impacts_data_path,
-    predict_rime,
+    predict_with_reduction,
 )
 from message_ix_models.util import package_data_path
 from message_ix_models.util.node import extract_region_code
@@ -92,6 +93,7 @@ def _freshwater_reference_shares() -> pd.Series:
 def predict_cooling_cf(
     gmt_array: np.ndarray,
     cooling: str = "wet",
+    reduction: ReductionMode = "mean",
 ) -> pd.DataFrame:
     """Predict regional capacity factors from GMT.
 
@@ -99,9 +101,12 @@ def predict_cooling_cf(
     ----------
     gmt_array
         GMT values in degC above pre-industrial. Shape ``(n_years,)`` or
-        ``(n_runs, n_years)`` for ensemble (returns expectation).
+        ``(n_runs, n_years)`` for ensemble.
     cooling
         ``"wet"`` (freshwater) or ``"dry"`` (air).
+    reduction
+        How to reduce the (MAGICC, RIME-source) ensemble pair into a per-cell
+        CF. See :data:`message_ix_models.tools.impacts.ReductionMode`.
 
     Returns
     -------
@@ -114,7 +119,9 @@ def predict_cooling_cf(
     gmt_clipped = clip_gmt(gmt_array, gmt_min=0.6, gmt_ceil=0.9)
 
     dataset_path = impacts_data_path("rime", _DATASET)
-    raw = predict_rime(gmt_clipped, dataset_path, _VAR, sel=sel)
+    raw = predict_with_reduction(
+        gmt_clipped, dataset_path, _VAR, sel=sel, reduction=reduction
+    )
     # raw shape: (12, n_years) — regions x time positions
 
     regions = _region_codes()
@@ -126,6 +133,7 @@ def compute_degradation_ratios(
     years: list[int],
     cooling: str = "wet",
     baseline_gwl: float = _DEFAULT_BASELINE_GWL,
+    reduction: ReductionMode = "mean",
 ) -> pd.DataFrame:
     """Compute degradation ratios: CF(GMT) / CF(baseline).
 
@@ -139,6 +147,10 @@ def compute_degradation_ratios(
         ``"wet"`` (freshwater) or ``"dry"`` (air).
     baseline_gwl
         Reference warming level (degC). Default 1.0.
+    reduction
+        How to reduce the ensemble pair. The same mode is used for the
+        trajectory and the baseline so both come from the same RIME column —
+        otherwise the ratio would compare a mean to a percentile.
 
     Returns
     -------
@@ -148,15 +160,13 @@ def compute_degradation_ratios(
         dips below baseline.
     """
     sel = _WET_SEL if cooling == "wet" else _DRY_SEL
-    cf = predict_cooling_cf(gmt_array, cooling=cooling)
+    cf = predict_cooling_cf(gmt_array, cooling=cooling, reduction=reduction)
 
-    # Baseline CF: single-point prediction at baseline_gwl
     dataset_path = impacts_data_path("rime", _DATASET)
-    cf_baseline = predict_rime(
-        np.array([baseline_gwl]), dataset_path, _VAR, sel=sel
+    cf_baseline = predict_with_reduction(
+        np.array([baseline_gwl]), dataset_path, _VAR, sel=sel, reduction=reduction
     )[:, 0]  # (12,)
 
-    # Ratio: broadcast baseline across time axis
     ratios = cf.values / cf_baseline[:, np.newaxis]
     return pd.DataFrame(ratios, index=cf.index.copy(), columns=years)
 

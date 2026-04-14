@@ -45,6 +45,8 @@ cid:
   steps: [buildings, cooling, water]
   # n_runs: null means use all available ensemble members
   n_runs: null
+  # Ensemble reduction across MAGICC and RIME-source axes
+  reduction: mean
   # Buildings CID coefficient scenario
   coeff_scenario: S1
 

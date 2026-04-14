@@ -271,7 +271,7 @@ class TestPredictCoolingCfClipBounds:
                 return_value=gmt,
             ) as mock_clip,
             patch(
-                "message_ix_models.model.water.data.cooling_impacts.predict_rime",
+                "message_ix_models.model.water.data.cooling_impacts.predict_with_reduction",
                 return_value=fake_raw,
             ),
             patch(

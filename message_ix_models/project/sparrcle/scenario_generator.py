@@ -32,6 +32,8 @@ from typing import Optional
 import yaml
 from ixmp import Platform
 
+from message_ix_models.tools.impacts import ReductionMode
+
 log = logging.getLogger(__name__)
 
 
@@ -78,12 +80,18 @@ def _run_water_ix(
     url = f"ixmp://{platform}/{starter_model}/{starter_scenario}"
     cmd = [
         "mix-models",
-        "--url", url,
-        "water-ix", subcommand,
-        "--regions", regions,
-        "--ssp", ssp,
-        "--rcps", rcps,
-        "--rels", rels,
+        "--url",
+        url,
+        "water-ix",
+        subcommand,
+        "--regions",
+        regions,
+        "--ssp",
+        ssp,
+        "--rcps",
+        rcps,
+        "--rels",
+        rels,
     ]
     if subcommand == "nexus" and sdgs is not None:
         cmd += ["--sdgs", sdgs]
@@ -124,7 +132,9 @@ def build_scenario(
     if step in ("cooling", "all"):
         log.info("Cooling: invoking mix-models water-ix cooling")
         _run_water_ix(
-            starter_model, starter_scenario, "cooling",
+            starter_model,
+            starter_scenario,
+            "cooling",
             regions=regions,
             ssp=ssp,
             rcps=cooling_config.get("rcps", "no_climate"),
@@ -135,7 +145,9 @@ def build_scenario(
     if step in ("nexus", "all"):
         log.info("Nexus: invoking mix-models water-ix nexus")
         _run_water_ix(
-            starter_model, starter_scenario, "nexus",
+            starter_model,
+            starter_scenario,
+            "nexus",
             regions=regions,
             ssp=ssp,
             rcps=nexus_config.get("rcps", "no_climate"),
@@ -276,6 +288,7 @@ def run_cid(
     if steps is None:
         steps = cid_config.get("steps", ["buildings", "cooling", "water"])
     n_runs = cid_config.get("n_runs")
+    reduction: ReductionMode = cid_config.get("reduction", "mean")
 
     # Import from _staging — add to path if needed
     staging_dir = Path(__file__).resolve().parents[3] / "_staging"
@@ -287,7 +300,7 @@ def run_cid(
     log.info("=" * 60)
     log.info(f"SPARRCLE CID PIPELINE: {model}/{source_scenario} ({ssp})")
     log.info(f"MAGICC dir: {magicc_dir}")
-    log.info(f"Steps: {steps}, n_runs: {n_runs or 'all'}")
+    log.info(f"Steps: {steps}, n_runs: {n_runs or 'all'}, reduction: {reduction}")
     log.info("=" * 60)
 
     return run_cid_pipeline(
@@ -297,4 +310,5 @@ def run_cid(
         magicc_dir=magicc_dir,
         steps=steps,
         n_runs=n_runs,
+        reduction=reduction,
     )
