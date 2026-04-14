@@ -25,15 +25,12 @@ Usage (Python)::
 """
 
 import logging
+import subprocess
 from pathlib import Path
 from typing import Optional
 
 import yaml
 from ixmp import Platform
-from message_ix import Scenario
-
-from message_ix_models import Context
-from message_ix_models.model.water.cli import cooling, nexus, water_ini
 
 log = logging.getLogger(__name__)
 
@@ -51,85 +48,47 @@ def load_config(config_path: Path) -> dict:
     return config
 
 
-def _build_cooling_module(
-    scen: Scenario,
-    rcps: str = "no_climate",
-    rels: str = "low",
-    regions: str = "R12",
-    ssp: str = "SSP2",
-) -> Scenario:
-    """Build cooling module onto scenario if not already present.
+# Phase 1 cooling/nexus module builds delegate to the upstream
+# `mix-models water-ix` CLI as a subprocess. The previous in-process
+# wrappers (_build_cooling_module / _build_nexus_module) called
+# `context.set_scenario(clone)` before invoking the water module's
+# cooling/nexus functions, which made the inner `add_water_supply`
+# (and similar) call `context.get_scenario()` against the freshly
+# cloned and currently-locked scenario — undefined-behaviour deadlock.
+#
+# The CLI path avoids this because `--url` keeps `scenario_info`
+# pointing at the original starter; the cooling/nexus call clones
+# internally and the inner read-back lands on the unlocked starter.
+# See ticket #337 activity for the original diagnosis.
 
-    Checks for freshwater cooling technologies; if absent, builds
-    the water/cooling module via the standard water build path.
-    """
-    existing_cf = scen.par("capacity_factor")
-    cooling_techs = existing_cf[
-        existing_cf["technology"].str.contains(
-            r"__(ot_fresh|cl_fresh)", regex=True, na=False
-        )
+
+def _run_water_ix(
+    starter_model: str,
+    starter_scenario: str,
+    subcommand: str,
+    *,
+    regions: str,
+    ssp: str,
+    rcps: str,
+    rels: str,
+    sdgs: Optional[str] = None,
+    platform: str = "ixmp_dev",
+) -> None:
+    """Invoke `mix-models --url=ixmp://... water-ix <subcommand>` per starter."""
+    url = f"ixmp://{platform}/{starter_model}/{starter_scenario}"
+    cmd = [
+        "mix-models",
+        "--url", url,
+        "water-ix", subcommand,
+        "--regions", regions,
+        "--ssp", ssp,
+        "--rcps", rcps,
+        "--rels", rels,
     ]
-
-    if len(cooling_techs) > 0:
-        log.info(
-            f"Cooling techs already present: {cooling_techs['technology'].nunique()} types"
-        )
-        return scen
-
-    log.info("Building cooling module...")
-
-    context = Context.get_instance(-1)
-    context.set_scenario(scen)
-    context.ssp = ssp
-    water_ini(context, regions=regions, time=None)
-    cooling(context, regions=regions, rcps=rcps, rels=rels, solve=False, clone=False, scen=scen)
-    log.info("Cooling module built successfully")
-
-    return scen
-
-
-def _build_nexus_module(
-    scen: Scenario,
-    nexus_config: dict,
-    ssp: str = "SSP2",
-    regions: str = "R12",
-) -> Scenario:
-    """Build water/nexus module onto scenario with basin filtering from config.
-
-    Reads reduced_basin, num_basins, basin_selection, and filter_list from
-    the nexus section of the YAML config and sets them on Context before
-    calling the standard water build path.
-    """
-    context = Context.get_instance(-1)
-    context.set_scenario(scen)
-    context.ssp = ssp
-    water_ini(context, regions=regions, time=None)
-    context.reduced_basin = nexus_config.get("reduced_basin", False)
-    if nexus_config.get("num_basins") is not None:
-        context.num_basins = nexus_config["num_basins"]
-    context.basin_selection = nexus_config.get("basin_selection", "first_k")
-    if nexus_config.get("filter_list"):
-        context.filter_list = nexus_config["filter_list"]
-
-    log.info(
-        f"Building nexus module: reduced_basin={context.reduced_basin}, "
-        f"num_basins={getattr(context, 'num_basins', 'default')}, "
-        f"filter_list has {len(nexus_config.get('filter_list', []))} entries"
-    )
-
-    nexus(
-        context,
-        regions=regions,
-        rcps=nexus_config.get("rcps", "no_climate"),
-        sdgs=nexus_config.get("sdgs", "baseline"),
-        rels=nexus_config.get("rels", "low"),
-        solve=False,
-        clone=False,
-        scen=scen,
-    )
-    log.info("Nexus module built successfully")
-
-    return scen
+    if subcommand == "nexus" and sdgs is not None:
+        cmd += ["--sdgs", sdgs]
+    log.info("→ %s", " ".join(cmd))
+    subprocess.run(cmd, check=True)
 
 
 def build_scenario(
@@ -140,33 +99,17 @@ def build_scenario(
     config: dict,
     step: str = "all",
     dry_run: bool = False,
-) -> dict:
+) -> None:
     """Build cooling and/or nexus modules for a single starter scenario.
 
-    Parameters
-    ----------
-    mp : Platform
-        ixmp platform connection.
-    starter_model, starter_scenario : str
-        Source scenario identifiers on the platform.
-    ssp : str
-        SSP label (SSP2, SSP3) — passed to nexus build for demand data.
-    config : dict
-        Full SPARRCLE config from load_config().
-    step : str
-        Which step to run: "cooling", "nexus", or "all" (default).
-    dry_run : bool
-        If True, validate only — do not clone or build.
-
-    Returns
-    -------
-    dict
-        Keys "cooling" and/or "nexus" → Scenario objects created.
+    Each step is delegated to a `mix-models --url=ixmp://... water-ix
+    <subcommand>` subprocess. The subprocess invocation is the only path
+    that keeps `context.scenario_info` pointing at the original starter,
+    avoiding the inner-handle deadlock documented in #337.
     """
-    cooling_suffix = config["output"]["cooling_suffix"]
-    nexus_suffix = config["output"]["nexus_suffix"]
     cooling_config = config["cooling"]
     nexus_config = config["nexus"]
+    platform = config["platform_info"]["name"]
     regions = config.get("regions", "R12")
 
     log.info("=" * 60)
@@ -176,62 +119,30 @@ def build_scenario(
 
     if dry_run:
         log.info("[DRY RUN] Validation passed")
-        return {}
+        return
 
-    result = {}
-
-    # --- Step 1: Cooling ---
     if step in ("cooling", "all"):
-        log.info("1. Loading starter scenario...")
-        starter = Scenario(mp, starter_model, starter_scenario)
-        log.info(f"   Loaded version {starter.version}")
-
-        cooling_scenario_name = starter_scenario + cooling_suffix
-        log.info(f"2. Cloning to {starter_model}/{cooling_scenario_name}...")
-        scen_cool = starter.clone(
-            model=starter_model,
-            scenario=cooling_scenario_name,
-            keep_solution=False,
-        )
-
-        log.info("3. Building cooling module...")
-        _build_cooling_module(
-            scen_cool,
-            rcps=cooling_config.get("rcps", "no_climate"),
-            rels=cooling_config.get("rels", "low"),
+        log.info("Cooling: invoking mix-models water-ix cooling")
+        _run_water_ix(
+            starter_model, starter_scenario, "cooling",
             regions=regions,
             ssp=ssp,
+            rcps=cooling_config.get("rcps", "no_climate"),
+            rels=cooling_config.get("rels", "low"),
+            platform=platform,
         )
-        scen_cool.set_as_default()
-        log.info(f"   Cooling scenario ready: v{scen_cool.version}")
-        result["cooling"] = scen_cool
 
-    # --- Step 2: Nexus ---
     if step in ("nexus", "all"):
-        # If we just built cooling, use that as the starter for nexus
-        if "cooling" in result:
-            scen_base = result["cooling"]
-        else:
-            # Load the expected cooling scenario
-            cooling_scenario_name = starter_scenario + cooling_suffix
-            log.info(f"Loading existing cooling scenario: {cooling_scenario_name}...")
-            scen_base = Scenario(mp, starter_model, cooling_scenario_name)
-
-        nexus_scenario_name = scen_base.scenario + nexus_suffix
-        log.info(f"4. Cloning to {starter_model}/{nexus_scenario_name}...")
-        scen_nexus = scen_base.clone(
-            model=starter_model,
-            scenario=nexus_scenario_name,
-            keep_solution=False,
+        log.info("Nexus: invoking mix-models water-ix nexus")
+        _run_water_ix(
+            starter_model, starter_scenario, "nexus",
+            regions=regions,
+            ssp=ssp,
+            rcps=nexus_config.get("rcps", "no_climate"),
+            rels=nexus_config.get("rels", "low"),
+            sdgs=nexus_config.get("sdgs", "baseline"),
+            platform=platform,
         )
-
-        log.info("5. Building nexus module...")
-        _build_nexus_module(scen_nexus, nexus_config, ssp=ssp, regions=regions)
-        scen_nexus.set_as_default()
-        log.info(f"   Nexus scenario ready: v{scen_nexus.version}")
-        result["nexus"] = scen_nexus
-
-    return result
 
 
 def build_all(
