@@ -20,19 +20,41 @@ platform_info:
   name: ixmp_dev
   jvmargs: "-Xmx16G"
 
-# Starter scenarios — assumed to exist on ixmp_dev.
-# One entry per SSP; scenario_generator iterates over the list.
+# Starter scenarios — assumed to exist on ixmp_dev. The list is the
+# source of truth for which scenarios the build pipeline iterates over.
+#
+# `_PHY` starters are prep clones of Adriano's solved GDP CI_50 inputs.
+# They stay unsolved (`keep_solution=False`) and carry the scoped
+# hydro_hc migration from `_staging/migrate_hydro_hc.py`.
+#
+# magicc_output_dir points at the upstream Adriano starter name with no
+# `_PHY` suffix because the MAGICC GSAT ensemble is keyed to that
+# upstream solved scenario.
 starters:
+  - model: SSP_SSP1_v6.5_sp
+    scenario: NPiREF_GDP_CI_50_ensemble_1_PHY
+    ssp: SSP1
+    magicc_output_dir: /mnt/p/watxene/IMPACTS/sparrcle/magicc_output/NPiREF_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP1_v6.5_sp
+    scenario: INDC2030i_uncon_800f_GDP_CI_50_ensemble_1_PHY
+    ssp: SSP1
+    magicc_output_dir: /mnt/p/watxene/IMPACTS/sparrcle/magicc_output/INDC2030i_uncon_800f_GDP_CI_50_ensemble_1/
   - model: SSP_SSP2_v6.5_sp
-    scenario: NPiREF_CI_0
+    scenario: NPiREF_GDP_CI_50_ensemble_2_PHY
     ssp: SSP2
-    # MAGICC 600-member GMT ensemble for CID pipeline (step 3)
-    # Directory must contain *_IAMC_climateassessment.xlsx
-    magicc_output_dir: _staging/magicc_output/SSP_SSP2_v6.5_sp__NPiREF_CI_0
+    magicc_output_dir: /mnt/p/watxene/IMPACTS/sparrcle/magicc_output/NPiREF_GDP_CI_50_ensemble_2/
   - model: SSP_SSP3_v6.5_sp
-    scenario: NPiREF_CI_0
+    scenario: NPiREF_GDP_CI_50_ensemble_2_PHY
     ssp: SSP3
-    magicc_output_dir: _staging/magicc_output/SSP_SSP3_v6.5_sp__NPiREF_CI_0
+    magicc_output_dir: /mnt/p/watxene/IMPACTS/sparrcle/magicc_output/NPiREF_GDP_CI_50_ensemble_2/
+  - model: SSP_SSP3_v6.5_sp
+    scenario: INDC2030i_uncon_600f_GDP_CI_50_ensemble_1_PHY
+    ssp: SSP3
+    magicc_output_dir: /mnt/p/watxene/IMPACTS/sparrcle/magicc_output/INDC2030i_uncon_600f_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP3_v6.5_sp
+    scenario: INDC2030i_uncon_800f_GDP_CI_50_ensemble_1_PHY
+    ssp: SSP3
+    magicc_output_dir: /mnt/p/watxene/IMPACTS/sparrcle/magicc_output/INDC2030i_uncon_800f_GDP_CI_50_ensemble_1/
 
 # Output naming: module build appends suffixes to starter scenario name
 # e.g. NPiREF_CI_0 → NPiREF_CI_0_cooling → NPiREF_CI_0_cooling_nexus
@@ -41,12 +63,14 @@ output:
   nexus_suffix: "_nexus"
 
 # --- CID pipeline settings (step 3) ---
+# water step skipped: requires the nexus module, which is not built in
+# the CI_2 delivery pipeline
 cid:
-  steps: [buildings, cooling, water]
+  steps: [buildings, cooling]
   # n_runs: null means use all available ensemble members
   n_runs: null
   # Ensemble reduction across MAGICC and RIME-source axes
-  reduction: mean
+  reduction: joint_p50
   # Buildings CID coefficient scenario
   coeff_scenario: S1
 
