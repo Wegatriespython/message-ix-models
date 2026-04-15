@@ -23,7 +23,7 @@ def cli(context):
 @click.option(
     "--ssp",
     "ssp_filter",
-    type=click.Choice(["SSP2", "SSP3"]),
+    type=click.Choice(["SSP1", "SSP2", "SSP3"]),
     help="Restrict the build to one SSP starter from the YAML config.",
 )
 @click.option(
@@ -33,11 +33,20 @@ def cli(context):
     show_default=True,
     help="Build only cooling, only nexus, or both in sequence.",
 )
-@click.option("--dry-run", is_flag=True, help="Validate config and report what would be built; no DB writes.")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Validate config and report what would be built; no DB writes.",
+)
 @click.pass_obj
-def build_cmd(context, config_path: Path, ssp_filter: str | None, step: str, dry_run: bool):
+def build_cmd(
+    context, config_path: Path, ssp_filter: str | None, step: str, dry_run: bool
+):
     """Build SPARRCLE cooling and water/nexus module scenarios."""
-    from message_ix_models.project.sparrcle.scenario_generator import build_all, load_config
+    from message_ix_models.project.sparrcle.scenario_generator import (
+        build_all,
+        load_config,
+    )
 
     config = load_config(config_path)
     build_all(config=config, ssp_filter=ssp_filter, step=step, dry_run=dry_run)
