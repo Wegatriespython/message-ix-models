@@ -168,6 +168,7 @@ Pre-processing
   - :file:`hydro_agg_spatial.R`: contains workflow for spatially aggregating monthly hydrological data onto basin using appropriate raster masking onto shapefiles
   - :file:`hydro_agg_basin.py`: contains workflow for aggregating monthly data to 5 yearly averages using appropriate statistical methods (quantiles, averages etc.).
     It also calculates e flows based on Variable MF method.
+  - :file:`generate_access_rates.py`: generates R12 × SSP × (urban, rural) drinking-water access rate CSVs from "Improved water services" projections (source: WHO-UNICEF Joint Monitoring Programme — TODO: confirm full citation); source data in :file:`data/water/demands/drinking_water_access/`.
 
 Deprecated R Code
 =================
