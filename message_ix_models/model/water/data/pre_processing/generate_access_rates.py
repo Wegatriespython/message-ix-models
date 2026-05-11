@@ -87,23 +87,18 @@ def load_iso3_to_r12() -> dict[str, str]:
 
 
 def load_file2() -> pd.DataFrame:
-    df = pd.read_csv(
-        DRINKING_WATER_ACCESS / "projections_people_UR_income_10_25.csv"
-    )
+    df = pd.read_csv(DRINKING_WATER_ACCESS / "projections_people_UR_income_10_25.csv")
     return df[df["variable"] == VARIABLE].copy()
 
 
 def load_file1() -> pd.DataFrame:
     df = pd.read_csv(
-        DRINKING_WATER_ACCESS
-        / "projections_people_merge_countries_10_25(in).csv"
+        DRINKING_WATER_ACCESS / "projections_people_merge_countries_10_25(in).csv"
     )
     return df[df["variable"] == VARIABLE].copy()
 
 
-def file2_regional_rates(
-    df: pd.DataFrame, iso2reg: dict[str, str]
-) -> pd.DataFrame:
+def file2_regional_rates(df: pd.DataFrame, iso2reg: dict[str, str]) -> pd.DataFrame:
     """Pop-weighted urban/rural rate per (SSP, year, R12) from file 2.
 
     Returns long frame: SSP, RCP, year, region, setting, rate.
@@ -124,9 +119,7 @@ def file2_regional_rates(
     ]
 
 
-def file1_regional_rates(
-    df: pd.DataFrame, iso2reg: dict[str, str]
-) -> pd.DataFrame:
+def file1_regional_rates(df: pd.DataFrame, iso2reg: dict[str, str]) -> pd.DataFrame:
     """Pop-weighted total rate per (SSP, year, R12) from file 1."""
     df = df.assign(region=df["iso3"].map(iso2reg))
     df = df[df["region"].isin(FILE1_REGIONS)]
@@ -245,7 +238,9 @@ def main() -> None:
     for ssp in SSPS:
         for setting in ("urban", "rural"):
             table = build_ssp_setting_csv(ssp, setting, file2_long, file1_long)
-            out = HARMONIZED / f"ssp{ssp}_regional_{setting}_connection_rate_baseline.csv"
+            out = (
+                HARMONIZED / f"ssp{ssp}_regional_{setting}_connection_rate_baseline.csv"
+            )
             table.to_csv(out)
             print(
                 f"ssp{ssp} {setting}: wrote {out.name} "
