@@ -1,56 +1,20 @@
 """Populate R12 x SSP x (urban, rural) drinking-water access rates.
 
-Sources
--------
-.. TODO: confirm full citation for the projection files (likely WHO-UNICEF
-   Joint Monitoring Programme as underlying data source; projection methodology
-   TBD).
+The source projection files under ``data/water/demands/drinking_water_access``
+carry ``Improved water services`` rates derived from JMP-WASH inputs. File 2
+(``projections_people_UR_income_10_25.csv``) has the native urban/rural split
+and is used for AFR, EEU, FSU, LAM, MEA, PAS, RCPA, SAS, and WEU. File 1
+(``projections_people_merge_countries_10_25(in).csv``; citation TBD) has total
+rates only and is used for NAM and CHN, with the same rate assigned to urban
+and rural. No GDP-weighted split is applied: the raw variable is a population
+access share, and these regions are already near saturation in file 1. PAO is
+set to 0.99 because file 1's 0.25-0.32 aggregate is not
+plausible for AUS/JPN/NZL/KOR. Known file-1/file-2 overlap offsets for EEU,
+PAS, and WEU are left uncorrected.
 
-- File 1: ``data/water/demands/drinking_water_access/
-  projections_people_merge_countries_10_25(in).csv`` — country x SSP
-  x RCP x year, variable ``Improved water services``. No urban/rural split.
-  Used here only for NAM and CHN imputation.
-- File 2: ``data/water/demands/drinking_water_access/
-  projections_people_UR_income_10_25.csv`` — country x SSP x RCP x
-  year x (urban|rural) x income quintile, same variable. File 2 excludes
-  NAM, CHN and PAO; it therefore only populates AFR, EEU, FSU, LAM, MEA,
-  PAS, RCPA, SAS and WEU under the canonical R12 mapping in
-  ``data/node/R12.yaml``.
-
-Rules per R12 region
---------------------
-1. File 2 is truth for the nine regions it covers:
-       urban_rate[R] = sum(pop_imp_acc_ur_inc | tot_ur=urban, iso3 in R)
-                     / sum(pop_ur_inc        | tot_ur=urban, iso3 in R)
-       rural_rate analogous.
-
-2. NAM and CHN: urban = rural = pop-weighted total ``share_acc`` from file 1
-   across iso3 in the region. File 1 gives ~1.0 for both — a saturation
-   ceiling, not a projection.
-
-3. PAO: domain override, urban = rural = 0.99 for every SSP and year. File 1
-   gives 0.25-0.32 for PAO which is a broken aggregate, not a bias offset,
-   so it is not used.
-
-Known regional offsets (file 1 biased low vs file 2, consistency-check result
-across the nine overlap regions): EEU -3.4 pp, PAS -6.4 pp, WEU -8.3 pp. Not
-corrected — recorded here as a boundary artifact of the two source files
-rather than a defect of either.
-
-Year coverage
--------------
-File 2 years: 2020, 2025, ..., 2095. File 1 years: 2025, 2030, ..., 2095.
-Target grid: 2010, 2020, 2030, ..., 2100, 2110. For target years below the
-earliest source year we carry the earliest value back (2010 carries from
-2020; 2010 and 2020 for NAM/CHN carry from 2025). For 2100 and 2110 we hold
-the 2090 value — no padding with a legacy baseline row.
-
-Output schema
--------------
-Each CSV columns the existing basin set (BCU_name like ``2|AFR``) in the
-legacy SSP2 file's order. The R12 rate is broadcast uniformly to every basin
-in that region via the column suffix; the imputation rules operate at the
-R12 level, so no basin-area downscaling is applied.
+Source values are population-weighted to R12 regions, carried backward to fill
+early target years, and capped forward at the 2090 value for 2100/2110. The R12
+rate is then broadcast uniformly to every basin column in that region.
 """
 
 import pandas as pd
@@ -86,97 +50,85 @@ def load_iso3_to_r12() -> dict[str, str]:
     return mapping
 
 
-def load_file2() -> pd.DataFrame:
-    df = pd.read_csv(DRINKING_WATER_ACCESS / "projections_people_UR_income_10_25.csv")
+def load_source(filename: str) -> pd.DataFrame:
+    df = pd.read_csv(DRINKING_WATER_ACCESS / filename)
     return df[df["variable"] == VARIABLE].copy()
 
 
-def load_file1() -> pd.DataFrame:
-    df = pd.read_csv(
-        DRINKING_WATER_ACCESS / "projections_people_merge_countries_10_25(in).csv"
-    )
-    return df[df["variable"] == VARIABLE].copy()
-
-
-def file2_regional_rates(df: pd.DataFrame, iso2reg: dict[str, str]) -> pd.DataFrame:
-    """Pop-weighted urban/rural rate per (SSP, year, R12) from file 2.
-
-    Returns long frame: SSP, RCP, year, region, setting, rate.
-    """
+def weighted_rates(
+    df: pd.DataFrame,
+    iso2reg: dict[str, str],
+    regions: list[str],
+    group_cols: list[str],
+    numerator: str,
+    denominator: str,
+) -> pd.DataFrame:
+    """Return population-weighted rates by SSP/RCP/year/region."""
     df = df.assign(region=df["iso3"].map(iso2reg))
-    df = df[df["region"].isin(FILE2_REGIONS)]
     agg = (
-        df.groupby(["SSP", "RCP", "year", "region", "tot_ur"])
-        .agg(
-            num=("pop_imp_acc_ur_inc", "sum"),
-            den=("pop_ur_inc", "sum"),
-        )
+        df[df["region"].isin(regions)]
+        .groupby(["SSP", "RCP", "year", "region", *group_cols])
+        .agg(num=(numerator, "sum"), den=(denominator, "sum"))
         .reset_index()
     )
     agg["rate"] = (agg["num"] / agg["den"]).clip(0, 1)
-    return agg.rename(columns={"tot_ur": "setting"})[
-        ["SSP", "RCP", "year", "region", "setting", "rate"]
-    ]
+    return agg.rename(columns={"tot_ur": "setting"})
+
+
+def file2_regional_rates(df: pd.DataFrame, iso2reg: dict[str, str]) -> pd.DataFrame:
+    """Pop-weighted urban/rural rate per (SSP, year, R12) from file 2."""
+    return weighted_rates(
+        df,
+        iso2reg,
+        FILE2_REGIONS,
+        group_cols=["tot_ur"],
+        numerator="pop_imp_acc_ur_inc",
+        denominator="pop_ur_inc",
+    )[["SSP", "RCP", "year", "region", "setting", "rate"]]
 
 
 def file1_regional_rates(df: pd.DataFrame, iso2reg: dict[str, str]) -> pd.DataFrame:
     """Pop-weighted total rate per (SSP, year, R12) from file 1."""
-    df = df.assign(region=df["iso3"].map(iso2reg))
-    df = df[df["region"].isin(FILE1_REGIONS)]
-    agg = (
-        df.groupby(["SSP", "RCP", "year", "region"])
-        .agg(num=("pop_acc", "sum"), den=("pop", "sum"))
-        .reset_index()
-    )
-    agg["rate"] = (agg["num"] / agg["den"]).clip(0, 1)
-    return agg[["SSP", "RCP", "year", "region", "rate"]]
+    return weighted_rates(
+        df,
+        iso2reg,
+        FILE1_REGIONS,
+        group_cols=[],
+        numerator="pop_acc",
+        denominator="pop",
+    )[["SSP", "RCP", "year", "region", "rate"]]
 
 
-def select_target_year_value(series: pd.Series, target: int) -> float:
-    """Map target-grid year to a source-year value.
+def align_to_target_years(wide: pd.DataFrame) -> pd.DataFrame:
+    """Carry source values onto the target decadal grid."""
+    if wide.empty:
+        raise ValueError("no source data to align")
 
-    - target below min available -> use earliest available
-    - target above max available -> use latest target-relevant source year,
-      which is 2090 (drop 2095 back to the last decadal point to match the
-      decadal target grid)
-    - otherwise exact match (all interior target years are decadal and
-      present in source)
-    """
-    available = sorted(series.dropna().index)
-    if not available:
-        raise ValueError("no source data to select from")
-    if target in series.index and pd.notna(series.get(target)):
-        return float(series.loc[target])
-    if target < available[0]:
-        return float(series.loc[available[0]])
-    # target > max: fall back to 2090 if present, else latest decadal <= max
-    decadal_cap = max(y for y in available if y % 10 == 0)
-    return float(series.loc[decadal_cap])
+    source_years = wide.dropna(how="all").index
+    decadal_cap = max(y for y in source_years if y % 10 == 0)
+    all_years = sorted(set(source_years) | set(TARGET_YEARS))
+
+    out = wide.reindex(all_years).ffill().bfill().loc[TARGET_YEARS]
+    if later_years := [y for y in TARGET_YEARS if y > decadal_cap]:
+        out.loc[later_years] = wide.loc[decadal_cap].to_numpy()
+    return out.astype(float)
 
 
 def region_rate_table(
     regional_long: pd.DataFrame,
     ssp: int,
-    setting_col: str | None = None,
+    setting: str | None = None,
 ) -> pd.DataFrame:
-    """Build target-year x region wide table for a given SSP.
+    """Build target-year x region wide table for a given SSP."""
+    mask = (regional_long["SSP"] == f"SSP{ssp}") & (
+        regional_long["RCP"] == SSP_RCP[ssp]
+    )
+    if setting is not None:
+        mask &= regional_long["setting"] == setting
 
-    regional_long: long frame with SSP, RCP, year, region, rate (+ optional
-    setting column).
-    """
-    ssp_str = f"SSP{ssp}"
-    rcp = SSP_RCP[ssp]
-    mask = (regional_long["SSP"] == ssp_str) & (regional_long["RCP"] == rcp)
-    if setting_col is not None:
-        mask &= regional_long["setting"] == setting_col
-    f = regional_long[mask]
-    wide = f.pivot(index="year", columns="region", values="rate").sort_index()
-    out = pd.DataFrame(index=TARGET_YEARS, columns=wide.columns, dtype=float)
-    for region in wide.columns:
-        series = wide[region]
-        for y in TARGET_YEARS:
-            out.at[y, region] = select_target_year_value(series, y)
-    return out
+    return align_to_target_years(
+        regional_long[mask].pivot(index="year", columns="region", values="rate")
+    )
 
 
 def legacy_column_order(setting: str) -> list[str]:
@@ -186,18 +138,21 @@ def legacy_column_order(setting: str) -> list[str]:
 
 
 def broadcast_region_to_basins(
-    region_rates: pd.Series, columns: list[str]
-) -> pd.Series:
-    """For each column `<basin_id>|<REGION>`, pick region_rates[REGION]."""
-    out = {}
-    for col in columns:
-        region = col.split("|")[-1]
-        if region not in region_rates.index:
-            raise KeyError(
-                f"region {region!r} not in rate table {list(region_rates.index)}"
-            )
-        out[col] = region_rates[region]
-    return pd.Series(out)
+    region_rates: pd.DataFrame, columns: list[str]
+) -> pd.DataFrame:
+    """For each column `<basin_id>|<REGION>`, pick that region's rate."""
+    regions = pd.Index(col.split("|")[-1] for col in columns)
+    missing = regions.difference(region_rates.columns)
+    if not missing.empty:
+        raise KeyError(
+            f"regions {list(missing)!r} not in rate table "
+            f"{list(region_rates.columns)!r}"
+        )
+
+    out = region_rates.loc[:, regions].copy()
+    out.columns = columns
+    out.index.name = ""
+    return out
 
 
 def build_ssp_setting_csv(
@@ -207,33 +162,30 @@ def build_ssp_setting_csv(
     file1_long: pd.DataFrame,
 ) -> pd.DataFrame:
     """Assemble the basin-wide table for one (ssp, setting) output."""
-    f2_wide = region_rate_table(file2_long, ssp, setting_col=setting)
-    f1_wide = region_rate_table(file1_long, ssp, setting_col=None)
+    file2_rates = region_rate_table(file2_long, ssp, setting=setting)
+    file1_rates = region_rate_table(file1_long, ssp)
 
     columns = legacy_column_order(setting)
-    rows = []
-    for year in TARGET_YEARS:
-        region_rates = {}
-        for r in FILE2_REGIONS:
-            region_rates[r] = f2_wide.at[year, r]
-        for r in FILE1_REGIONS:
-            region_rates[r] = f1_wide.at[year, r]
-        region_rates["PAO"] = PAO_OVERRIDE[setting]
-        series = broadcast_region_to_basins(pd.Series(region_rates), columns)
-        series.name = year
-        rows.append(series)
-    out = pd.DataFrame(rows)
-    out.index = pd.Index(TARGET_YEARS, name="")
-    return out[columns]
+    region_rates = pd.concat(
+        [
+            file2_rates[FILE2_REGIONS],
+            file1_rates[FILE1_REGIONS],
+            pd.DataFrame({"PAO": PAO_OVERRIDE[setting]}, index=TARGET_YEARS),
+        ],
+        axis=1,
+    )
+    return broadcast_region_to_basins(region_rates, columns)
 
 
 def main() -> None:
     iso2reg = load_iso3_to_r12()
 
-    f2 = load_file2()
-    f1 = load_file1()
-    file2_long = file2_regional_rates(f2, iso2reg)
-    file1_long = file1_regional_rates(f1, iso2reg)
+    file2_long = file2_regional_rates(
+        load_source("projections_people_UR_income_10_25.csv"), iso2reg
+    )
+    file1_long = file1_regional_rates(
+        load_source("projections_people_merge_countries_10_25(in).csv"), iso2reg
+    )
 
     for ssp in SSPS:
         for setting in ("urban", "rural"):
