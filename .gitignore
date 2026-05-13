@@ -163,3 +163,10 @@ scenario_parameters.pkl
 */data/bilateralize/*/bare_files/*
 */data/bilateralize/*/GEM/*
 /message_ix_models/project/newpathways/diagnostics/data
+
+# SPARCCLE operational staging — sbatch wrappers, MAGICC runner, ticket
+# manifests, parametric pipeline scripts. Lives in the worktree for
+# colocation with the library code under message_ix_models/project/sparccle/,
+# but is never shipped via PR #479. Single source of truth migrated here
+# from ~/sparrcle/_staging/ on 2026-05-13 (ticket #533).
+/_staging/
