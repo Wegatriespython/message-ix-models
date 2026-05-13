@@ -23,35 +23,40 @@ regions: R12
 # magicc_output_dir points at the upstream Adriano starter name with no
 # `_PHY` suffix because the MAGICC GSAT ensemble is keyed to that
 # upstream solved scenario.
+#
+# v6.6 layout note: MAGICC outputs sit under a per-model subtree
+# (`<MODEL>/<scenario>/`). v6.5 used a flat `<MODEL>__<scenario>/`
+# directory. Each starter row carries its own directory path, so no
+# implicit naming rule lives in the library code.
 starters:
-  - model: SSP_SSP1_v6.5_sp
+  - model: SSP_SSP1_v6.6_sp
     scenario: NPiREF_GDP_CI_50_ensemble_1_PHY
     ssp: SSP1
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP1_v6.5_sp__NPiREF_GDP_CI_50_ensemble_1/
-  - model: SSP_SSP1_v6.5_sp
-    scenario: INDC2030i_uncon_800f_GDP_CI_50_ensemble_1_PHY
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP1_v6.6_sp/NPiREF_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP2_v6.6_sp
+    scenario: NPiREF_GDP_CI_50_ensemble_2_PHY
+    ssp: SSP2
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP2_v6.6_sp/NPiREF_GDP_CI_50_ensemble_2/
+  - model: SSP_SSP3_v6.6_sp
+    scenario: NPiREF_GDP_CI_50_ensemble_2_PHY
+    ssp: SSP3
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp/NPiREF_GDP_CI_50_ensemble_2/
+  - model: SSP_SSP1_v6.6_sp
+    scenario: INDC2030i_439f_GDP_CI_50_ensemble_1_PHY
     ssp: SSP1
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP1_v6.5_sp__INDC2030i_uncon_800f_GDP_CI_50_ensemble_1/
-  - model: SSP_SSP2_v6.5_sp
-    scenario: NPiREF_GDP_CI_50_ensemble_2_PHY
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP1_v6.6_sp/INDC2030i_439f_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP1_v6.6_sp
+    scenario: INDC2030i_800f_GDP_CI_50_ensemble_1_PHY
+    ssp: SSP1
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP1_v6.6_sp/INDC2030i_800f_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP2_v6.6_sp
+    scenario: INDC2030i_800f_GDP_CI_50_ensemble_1_PHY
     ssp: SSP2
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP2_v6.5_sp__NPiREF_GDP_CI_50_ensemble_2/
-  - model: SSP_SSP2_v6.5_sp
-    scenario: INDC2030i_uncon_600f_GDP_CI_50_ensemble_1_PHY
-    ssp: SSP2
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP2_v6.5_sp__INDC2030i_uncon_600f_GDP_CI_50_ensemble_1/
-  - model: SSP_SSP3_v6.5_sp
-    scenario: NPiREF_GDP_CI_50_ensemble_2_PHY
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP2_v6.6_sp/INDC2030i_800f_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP3_v6.6_sp
+    scenario: INDC2030i_800f_GDP_CI_50_ensemble_1_PHY
     ssp: SSP3
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.5_sp__NPiREF_GDP_CI_50_ensemble_2/
-  - model: SSP_SSP3_v6.5_sp
-    scenario: INDC2030i_uncon_600f_GDP_CI_50_ensemble_1_PHY
-    ssp: SSP3
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.5_sp__INDC2030i_uncon_600f_GDP_CI_50_ensemble_1/
-  - model: SSP_SSP3_v6.5_sp
-    scenario: INDC2030i_uncon_800f_GDP_CI_50_ensemble_1_PHY
-    ssp: SSP3
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.5_sp__INDC2030i_uncon_800f_GDP_CI_50_ensemble_1/
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp/INDC2030i_800f_GDP_CI_50_ensemble_1/
 
 # Phase-1 cooling-module build settings (passed to `mix-models water-ix cooling`)
 cooling:
