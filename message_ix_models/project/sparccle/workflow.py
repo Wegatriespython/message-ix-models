@@ -282,6 +282,9 @@ def generate(
 
     platform = config["platform_info"]["name"]
     regions = config["regions"]
+    # apply_buildings and apply_cooling read context.model.regions, which
+    # defaults to "R14"; bind it here so Phase-2 kernels match the yaml.
+    context.model.regions = regions
     cooling_cfg = config["cooling"]
     cid_cfg = config["cid"]
 
@@ -344,7 +347,7 @@ def generate(
                 f"{label} CI_p",
                 cooling_step,
                 apply_cooling,
-                target=f"ixmp://{platform}/{model}/{scenario}_CI_p",
+                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_p",
                 clone=True,
                 **cooling,
             )
@@ -354,7 +357,7 @@ def generate(
                 f"{label} CI_bp",
                 cooling_step,
                 _apply_buildings_and_cooling,
-                target=f"ixmp://{platform}/{model}/{scenario}_CI_bp",
+                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_bp",
                 clone=True,
                 **buildings,
                 **(
