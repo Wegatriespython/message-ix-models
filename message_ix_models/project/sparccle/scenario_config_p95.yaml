@@ -3,21 +3,29 @@
 # Consumed by `message_ix_models.project.sparccle.workflow.generate` when
 # invoked as `mix-models sparccle run --config <this file>`.
 #
-# Conditions the CID layer on the per-year p95 GSAT envelope rather than the
-# ensemble mean. The library's MAGICC reducer is unchanged; instead the
-# per-starter `magicc_output_dir` points at a pre-filtered sibling pdrive
-# subtree (`SSP_SSPX_v6.6_sp_p95/<scenario>/`) where each xlsx contains one
-# synthetic-run row whose values are the per-year 95th percentile across the
-# original 600 `|run_*` rows. The `Model.str.contains("|run_")` row selector
-# in `load_magicc_gmt` picks the synthetic row up; mean-over-1-trajectory
-# equals the p95 envelope.
+# Conditions the CID layer on a K-run window around the 95th-percentile rank
+# of the MAGICC GSAT ensemble (ranked by mean GMT over 2050–2100). The
+# library's MAGICC reducer is unchanged; the per-starter `magicc_output_dir`
+# points at a pre-filtered sibling pdrive subtree
+# (`SSP_SSPX_v6.6_sp_p95/<scenario>/`) where each xlsx carries only the
+# K=10 `|run_*` rows nearest the p95 rank. `load_magicc_gmt` picks them all
+# up; `predict_rime`'s MC mean across those runs is a conditional
+# expectation of CID around the p95 warming trajectory.
+#
+# A naive single-synthetic-row p95 envelope was tried first and rejected
+# by `predict_rime`'s linearity guard — for non-linear emulators
+# (EI_cool, EI_heat) f(E[GMT]) is not a reliable substitute for E[f(GMT)].
+# Multi-run input avoids that bias while keeping the window narrow enough
+# that the conditional mean is close to the impact at the p95 trajectory.
 #
 # Filter script: `_staging/filter_magicc_p95.py`, consuming the ticket-544
 # manifest at `_staging/tickets/544.txt`.
 #
-# CAVEAT: the synthetic p95 trajectory is NOT a physical MAGICC run; it is a
-# year-by-year envelope. Ensemble statistics are not preserved across this
-# reduction. STITCHES would be the principled alternative.
+# CAVEAT: the K=10 window is a Monte Carlo estimate of a conditional
+# expectation, not a full ensemble or STITCHES-coherent sample. The library
+# emits "MC mean is approximate" warnings for non-linear emulators —
+# expected, and accepted for this delivery. STITCHES integration (rimeX
+# skill) would be the principled answer.
 
 platform_info:
   name: ixmp_dev
