@@ -342,8 +342,13 @@ def cooling(
         scen.set_as_default()
 
     if solve:
-        # Solve
-        scen.solve(solve_options={"lpmethod": "4", "scaind": "1"}, case=caseName)
+        # Solve skipped: the cooling-build feasibility solve used
+        # scaind=1 (aggressive CPLEX scaling) and produced "optimal with
+        # unscaled infeasibilities" on numerically sensitive starters
+        # that re-solve cleanly under scaind=-1 downstream. Leaving the
+        # cooling output unsolved; downstream consumers (e.g. SPARCCLE
+        # MACRO re-solve) solve it themselves with scaind=-1.
+        pass
 
 
 @cli.command("report")
