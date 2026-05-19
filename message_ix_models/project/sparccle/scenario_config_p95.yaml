@@ -1,0 +1,51 @@
+# SPARCCLE Scenario Configuration — p95 envelope sibling of scenario_config.yaml
+#
+# Consumed by `message_ix_models.project.sparccle.workflow.generate` when
+# invoked as `mix-models sparccle run --config <this file>`.
+#
+# Conditions the CID layer on the per-year p95 GSAT envelope rather than the
+# ensemble mean. The library's MAGICC reducer is unchanged; instead the
+# per-starter `magicc_output_dir` points at a pre-filtered sibling pdrive
+# subtree (`SSP_SSPX_v6.6_sp_p95/<scenario>/`) where each xlsx contains one
+# synthetic-run row whose values are the per-year 95th percentile across the
+# original 600 `|run_*` rows. The `Model.str.contains("|run_")` row selector
+# in `load_magicc_gmt` picks the synthetic row up; mean-over-1-trajectory
+# equals the p95 envelope.
+#
+# Filter script: `_staging/filter_magicc_p95.py`, consuming the ticket-544
+# manifest at `_staging/tickets/544.txt`.
+#
+# CAVEAT: the synthetic p95 trajectory is NOT a physical MAGICC run; it is a
+# year-by-year envelope. Ensemble statistics are not preserved across this
+# reduction. STITCHES would be the principled alternative.
+
+platform_info:
+  name: ixmp_dev
+
+regions: R12
+
+# p95 starters. SSP1/SSP2 CI_95 starters were not yet on ixmp_dev when this
+# delivery was prepared, so the 7-row #533 mirror reduces to 2 SSP3 rows.
+starters:
+  - model: SSP_SSP3_v6.6_sp
+    scenario: NPiREF_GDP_CI_95_ensemble_2_PHY
+    ssp: SSP3
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp_p95/NPiREF_GDP_CI_95_ensemble_2/
+  - model: SSP_SSP3_v6.6_sp
+    scenario: INDC2030i_800f_GDP_CI_95_ensemble_1_PHY
+    ssp: SSP3
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp_p95/INDC2030i_800f_GDP_CI_95_ensemble_1/
+
+# Phase-1 cooling-module build settings (passed to `mix-models water-ix cooling`)
+cooling:
+  rcps: no_climate
+  rels: low
+
+# Phase-2 CID settings
+cid:
+  # `n_runs: null` is mandatory here: the upstream xlsx has exactly one
+  # synthetic |run_p95 row. Truncating below that would yield an empty
+  # ensemble.
+  n_runs: null
+  # Earliest model year touched by cooling CID constraints and dry-cooling derating.
+  min_year: 2045
