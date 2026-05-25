@@ -56,6 +56,50 @@ def load_config(path: str | Path) -> dict:
     return config
 
 
+def _resolve_magicc_dir(
+    starter: dict,
+    *,
+    magicc_root: str | Path | None,
+    magicc_file: str | Path | None,
+    magicc_model_suffix: str,
+    n_starters: int,
+) -> str:
+    """Resolve a starter's MAGICC output directory.
+
+    Precedence:
+
+    1. ``magicc_file`` — single absolute path; only valid with one starter.
+       Sets the directory to the file's parent (the loader globs there).
+    2. ``magicc_root`` — composes ``<root>/<model><suffix>/<scenario_stem>/``,
+       where ``scenario_stem`` is the starter scenario with any trailing
+       ``_PHY`` suffix removed.
+    3. The starter's own ``magicc_output_dir`` from the YAML (legacy path).
+
+    Raises if none of the three is available.
+    """
+    if magicc_file is not None:
+        if n_starters != 1:
+            raise ValueError(
+                "--magicc-file requires exactly one starter in the config; "
+                f"got {n_starters}. Use --magicc-root for multi-starter configs."
+            )
+        return str(Path(magicc_file).resolve().parent)
+
+    if magicc_root is not None:
+        model_dir = f"{starter['model']}{magicc_model_suffix}"
+        scenario_stem = starter["scenario"].removesuffix("_PHY")
+        return str(Path(magicc_root) / model_dir / scenario_stem)
+
+    if starter.get("magicc_output_dir"):
+        return starter["magicc_output_dir"]
+
+    tag = f"{starter['model']}/{starter['scenario']}"
+    raise ValueError(
+        f"Starter {tag} lacks magicc_output_dir and no --magicc-root or "
+        "--magicc-file was given."
+    )
+
+
 def _missing_magicc(starters: list[dict]) -> list[str]:
     out: list[str] = []
     for starter in starters:
@@ -253,6 +297,9 @@ def generate(
     context: "Context",
     *,
     config_path: str | Path | None = None,
+    magicc_root: str | Path | None = None,
+    magicc_file: str | Path | None = None,
+    magicc_model_suffix: str = "",
     **options,
 ) -> Workflow:
     """Build the SPARCCLE Phase-1 + Phase-2 workflow.
@@ -263,6 +310,11 @@ def generate(
         Context object (passed to each step).
     config_path
         Path to ``scenario_config.yaml``. Defaults to the packaged copy.
+    magicc_root, magicc_file, magicc_model_suffix
+        MAGICC location overrides; see :func:`_resolve_magicc_dir` for the
+        precedence rules. When neither ``magicc_root`` nor ``magicc_file``
+        is given, the per-starter ``magicc_output_dir`` from the YAML is
+        used.
     options
         Reserved for forward-compatibility with extra CLI options;
         currently ignored.
@@ -276,6 +328,17 @@ def generate(
     del options
 
     config = load_config(config_path or _DEFAULT_CONFIG_PATH)
+
+    n_starters = len(config["starters"])
+    for starter in config["starters"]:
+        starter["magicc_output_dir"] = _resolve_magicc_dir(
+            starter,
+            magicc_root=magicc_root,
+            magicc_file=magicc_file,
+            magicc_model_suffix=magicc_model_suffix,
+            n_starters=n_starters,
+        )
+
     validate_inputs(config)
 
     wf = Workflow(context)
@@ -294,8 +357,6 @@ def generate(
         scenario = starter["scenario"]
         ssp = starter["ssp"]
         magicc_dir = starter["magicc_output_dir"]
-        if not magicc_dir:
-            raise ValueError(f"Starter {model}/{scenario} lacks magicc_output_dir")
 
         label = f"{ssp}/{scenario}"
         base_step = f"{label} base"

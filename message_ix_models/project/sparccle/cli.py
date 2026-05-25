@@ -25,6 +25,34 @@ cli.add_command(
                 default=None,
                 help="Path to scenario_config.yaml (default: packaged copy).",
             ),
+            click.Option(
+                ["--magicc-root", "magicc_root"],
+                type=click.Path(exists=True, file_okay=False, path_type=Path),
+                default=None,
+                help=(
+                    "MAGICC output root. When set, per-starter directories"
+                    " resolve to <root>/<model><suffix>/<scenario without _PHY>/"
+                    " and any magicc_output_dir in the YAML is ignored."
+                ),
+            ),
+            click.Option(
+                ["--magicc-file", "magicc_file"],
+                type=click.Path(exists=True, dir_okay=False, path_type=Path),
+                default=None,
+                help=(
+                    "Single MAGICC xlsx path; only valid with one starter."
+                    " Overrides --magicc-root and YAML."
+                ),
+            ),
+            click.Option(
+                ["--magicc-model-suffix", "magicc_model_suffix"],
+                type=str,
+                default="",
+                help=(
+                    "Suffix appended to <model> when composing paths under"
+                    " --magicc-root (e.g. '_p95' for the p95 envelope tree)."
+                ),
+            ),
         ],
     )
 )

@@ -69,5 +69,23 @@ Each target writes a suffixed clone:
   ``Physical Climate Impact|Thermoelectric Cooling|*`` timeseries.
 - ``<scenario>_cooling_CI_bp`` — both, in one workflow step.
 
+MAGICC location flags
+=====================
+
+The per-starter ``magicc_output_dir`` in ``scenario_config.yaml`` can be
+overridden at invocation:
+
+- ``--magicc-root <path>`` composes
+  ``<root>/<model><suffix>/<scenario without _PHY>/`` per starter.
+- ``--magicc-model-suffix <str>`` appends to the model component when
+  composing under ``--magicc-root`` (e.g. ``_p95`` for the p95 envelope
+  tree).
+- ``--magicc-file <path>`` is a single-xlsx override for one-starter
+  test runs.
+
+Precedence: ``--magicc-file`` > ``--magicc-root`` > YAML. This lets one
+packaged YAML serve multiple delivery variants whose only difference is
+the MAGICC tree location.
+
 See :doc:`/impacts/index` for the impact application modules and
 :doc:`/api/tools-impacts` for the underlying GMT-to-impact toolkit.
