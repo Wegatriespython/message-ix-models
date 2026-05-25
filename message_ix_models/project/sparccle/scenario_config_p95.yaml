@@ -1,16 +1,21 @@
 # SPARCCLE Scenario Configuration — p95 envelope sibling of scenario_config.yaml
 #
 # Consumed by `message_ix_models.project.sparccle.workflow.generate` when
-# invoked as `mix-models sparccle run --config <this file>`.
+# invoked as:
+#
+#   mix-models sparccle run \
+#       --config <this file> \
+#       --magicc-root /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output \
+#       --magicc-model-suffix _p95 \
+#       "all CI" --go
 #
 # Conditions the CID layer on a K-run window around the 95th-percentile rank
 # of the MAGICC GSAT ensemble (ranked by mean GMT over 2050–2100). The
-# library's MAGICC reducer is unchanged; the per-starter `magicc_output_dir`
-# points at a pre-filtered sibling pdrive subtree
-# (`SSP_SSPX_v6.6_sp_p95/<scenario>/`) where each xlsx carries only the
-# K=10 `|run_*` rows nearest the p95 rank. `load_magicc_gmt` picks them all
-# up; `predict_rime`'s MC mean across those runs is a conditional
-# expectation of CID around the p95 warming trajectory.
+# library's MAGICC reducer is unchanged; the filtered sibling pdrive subtree
+# (`SSP_SSPX_v6.6_sp_p95/<scenario>/`) carries only the K=10 `|run_*` rows
+# nearest the p95 rank. `load_magicc_gmt` picks them all up;
+# `predict_rime`'s MC mean across those runs is a conditional expectation of
+# CID around the p95 warming trajectory.
 #
 # A naive single-synthetic-row p95 envelope was tried first and rejected
 # by `predict_rime`'s linearity guard — for non-linear emulators
@@ -34,15 +39,14 @@ regions: R12
 
 # p95 starters. SSP1/SSP2 CI_95 starters were not yet on ixmp_dev when this
 # delivery was prepared, so the 7-row #533 mirror reduces to 2 SSP3 rows.
+# MAGICC paths come from --magicc-root + --magicc-model-suffix at invocation.
 starters:
   - model: SSP_SSP3_v6.6_sp
     scenario: NPiREF_GDP_CI_95_ensemble_2_PHY
     ssp: SSP3
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp_p95/NPiREF_GDP_CI_95_ensemble_2/
   - model: SSP_SSP3_v6.6_sp
     scenario: INDC2030i_800f_GDP_CI_95_ensemble_1_PHY
     ssp: SSP3
-    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp_p95/INDC2030i_800f_GDP_CI_95_ensemble_1/
 
 # Phase-1 cooling-module build settings (passed to `mix-models water-ix cooling`)
 cooling:
@@ -51,9 +55,8 @@ cooling:
 
 # Phase-2 CID settings
 cid:
-  # `n_runs: null` is mandatory here: the upstream xlsx has exactly one
-  # synthetic |run_p95 row. Truncating below that would yield an empty
-  # ensemble.
+  # `n_runs: null` lets the K=10 window through unchanged; truncating below
+  # K would drop the conditional sample MC needs.
   n_runs: null
   # Earliest model year touched by cooling CID constraints and dry-cooling derating.
   min_year: 2045
