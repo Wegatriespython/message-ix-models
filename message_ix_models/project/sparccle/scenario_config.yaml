@@ -57,6 +57,10 @@ starters:
     scenario: INDC2030i_800f_GDP_CI_50_ensemble_1_PHY
     ssp: SSP3
     magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp/INDC2030i_800f_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP3_v6.6_sp
+    scenario: INDC2030i_520f_GDP_CI_50_ensemble_1_PHY
+    ssp: SSP3
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP3_v6.6_sp/INDC2030i_520f_GDP_CI_50_ensemble_1/
 
 # Phase-1 cooling-module build settings (passed to `mix-models water-ix cooling`)
 cooling:

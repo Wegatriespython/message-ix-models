@@ -37,8 +37,10 @@ platform_info:
 
 regions: R12
 
-# p95 starters. SSP1/SSP2 CI_95 starters were not yet on ixmp_dev when this
-# delivery was prepared, so the 7-row #533 mirror reduces to 2 SSP3 rows.
+# p95 starters. The initial #544 delivery shipped 2 SSP3 rows (NPiREF + INDC_800f);
+# SSP1/SSP2 CI_95 starters were not yet on ixmp_dev at that time. INDC_520f added
+# under #566 alongside its CI_50 sibling in scenario_config.yaml. SSP1/SSP2 rows
+# extend this list once Adriano's CI_95 starters land on ixmp_dev (Phase 2 of #566).
 # MAGICC paths come from --magicc-root + --magicc-model-suffix at invocation.
 starters:
   - model: SSP_SSP3_v6.6_sp
@@ -46,6 +48,9 @@ starters:
     ssp: SSP3
   - model: SSP_SSP3_v6.6_sp
     scenario: INDC2030i_800f_GDP_CI_95_ensemble_1_PHY
+    ssp: SSP3
+  - model: SSP_SSP3_v6.6_sp
+    scenario: INDC2030i_520f_GDP_CI_95_ensemble_1_PHY
     ssp: SSP3
 
 # Phase-1 cooling-module build settings (passed to `mix-models water-ix cooling`)
