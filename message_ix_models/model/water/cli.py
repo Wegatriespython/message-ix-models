@@ -242,7 +242,13 @@ def nexus(context: "Context", regions, rcps, sdgs, rels, macro=False):
             case=caseName,
         )
     else:
-        scen.solve(solve_options={"lpmethod": "4", "scaind": "-1"}, case=caseName)
+        # DIAGNOSTIC (ticket #571, dummy branch only): iis=1 makes CPLEX emit
+        # the irreducible infeasible set to the listing when the LP is
+        # infeasible. No-op on a feasible solve. Do not merge to the PR branch.
+        scen.solve(
+            solve_options={"lpmethod": "4", "scaind": "-1", "iis": "1"},
+            case=caseName,
+        )
 
     # if options["report"]:
     #     # Also output diagnostic reports
