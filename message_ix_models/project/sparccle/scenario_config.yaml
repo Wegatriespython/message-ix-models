@@ -45,6 +45,10 @@ starters:
     scenario: INDC2030i_439f_GDP_CI_50_ensemble_1_PHY
     ssp: SSP1
     magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP1_v6.6_sp/INDC2030i_439f_GDP_CI_50_ensemble_1/
+  - model: SSP_SSP2_v6.6_sp
+    scenario: INDC2030i_439f_GDP_CI_50_ensemble_1_PHY
+    ssp: SSP2
+    magicc_output_dir: /pdrive/projects/watxene/IMPACTS/sparrcle/magicc_output/SSP_SSP2_v6.6_sp/INDC2030i_439f_GDP_CI_50_ensemble_1/
   - model: SSP_SSP1_v6.6_sp
     scenario: INDC2030i_800f_GDP_CI_50_ensemble_1_PHY
     ssp: SSP1
