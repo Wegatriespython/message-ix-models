@@ -52,6 +52,9 @@ starters:
   - model: SSP_SSP3_v6.6_sp
     scenario: INDC2030i_520f_GDP_CI_95_ensemble_1_PHY
     ssp: SSP3
+  - model: SSP_SSP3_v6.6_sp
+    scenario: INDC2030i_600f_GDP_CI_95_ensemble_1_PHY
+    ssp: SSP3
 
 # Phase-1 cooling-module build settings (passed to `mix-models water-ix cooling`)
 cooling:
