@@ -18,7 +18,13 @@ from .climate import (
     load_magicc_gmt,
     persist_gmt_mean,
 )
-from .rime import check_emulator_linearity, clip_gmt, open_rime_dataset, predict_rime
+from .rime import (
+    check_emulator_linearity,
+    clip_gmt,
+    open_rime_dataset,
+    predict_rime,
+    resolve_rime_variable,
+)
 from .temporal import sample_to_model_years
 
 impacts_data_path = partial(package_data_path, "impacts")
@@ -35,5 +41,6 @@ __all__ = [
     "open_rime_dataset",
     "persist_gmt_mean",
     "predict_rime",
+    "resolve_rime_variable",
     "sample_to_model_years",
 ]

@@ -51,7 +51,12 @@ def load_config(path: str | Path) -> dict:
 
     config = dict(raw)
     config["cooling"] = {"rcps": "no_climate", "rels": "low", **raw["cooling"]}
-    config["cid"] = {"n_runs": None, "min_year": None, **raw.get("cid", {})}
+    config["cid"] = {
+        "n_runs": None,
+        "min_year": None,
+        "response_percentile": None,
+        **raw.get("cid", {}),
+    }
     config["regions"] = raw.get("regions", "R12")
     return config
 
@@ -213,8 +218,13 @@ def apply_buildings(
     magicc_dir: str | Path,
     n_runs: int | None = None,
     reference_scenario: str = "SSP2",
+    response_percentile: int | str | None = None,
 ) -> None:
-    """Apply building-energy CIDs in place on *scenario* (``CI_b`` step)."""
+    """Apply building-energy CIDs in place on *scenario* (``CI_b`` step).
+
+    *response_percentile* selects a conditional response percentile within each
+    RIME GWL window (e.g. ``90``); ``None`` uses the ensemble-mean surface.
+    """
     from message_ix_models.model.buildings.impacts import (
         apply_building_cids,
         compute_building_cids,
@@ -228,12 +238,14 @@ def apply_buildings(
         ScenarioInfo(scenario).Y,
         reference_scenario=reference_scenario,
         regions=context.model.regions,
+        response_percentile=response_percentile,
     )
+    pct = "mean" if response_percentile is None else f"p{response_percentile}"
     apply_building_cids(
         scenario,
         cooling,
         heating,
-        commit_message=f"Building CIDs ({reference_scenario}, {n} runs)",
+        commit_message=f"Building CIDs ({reference_scenario}, {n} runs, {pct})",
         reference_scenario=reference_scenario,
     )
     persist_gmt_mean(scenario, gmt)
@@ -246,22 +258,27 @@ def apply_cooling(
     magicc_dir: str | Path,
     n_runs: int | None = None,
     min_year: int | None = None,
+    response_percentile: int | str | None = None,
 ) -> None:
     """Apply wet + dry cooling CIDs in place on *scenario* (``CI_p`` step).
 
     *min_year* defaults to
     :data:`model.water.data.cooling_impacts._DEFAULT_MIN_YEAR` when ``None``.
+    *response_percentile* selects a conditional response percentile within each
+    RIME GWL window (e.g. ``90``); ``None`` uses the ensemble-mean surface.
     """
     from message_ix_models.model.water.data.cooling_impacts import apply_cooling_cids
 
     gmt = load_magicc_gmt(magicc_dir, n_runs=n_runs)
     n = gmt.values.shape[0] if gmt.values.ndim > 1 else 1
     kwargs = {"min_year": min_year} if min_year is not None else {}
+    pct = "mean" if response_percentile is None else f"p{response_percentile}"
     apply_cooling_cids(
         scenario,
         gmt,
-        commit_message=f"Cooling CIDs (wet+dry), {n} runs",
+        commit_message=f"Cooling CIDs (wet+dry), {n} runs, {pct}",
         regions=context.model.regions,
+        response_percentile=response_percentile,
         **kwargs,
     )
     persist_gmt_mean(scenario, gmt)
@@ -275,6 +292,7 @@ def _apply_buildings_and_cooling(
     n_runs: int | None = None,
     reference_scenario: str = "SSP2",
     min_year: int | None = None,
+    response_percentile: int | str | None = None,
 ) -> None:
     """``CI_bp`` composite: buildings then cooling CIDs in place."""
     apply_buildings(
@@ -283,6 +301,7 @@ def _apply_buildings_and_cooling(
         magicc_dir=magicc_dir,
         n_runs=n_runs,
         reference_scenario=reference_scenario,
+        response_percentile=response_percentile,
     )
     apply_cooling(
         context,
@@ -290,6 +309,7 @@ def _apply_buildings_and_cooling(
         magicc_dir=magicc_dir,
         n_runs=n_runs,
         min_year=min_year,
+        response_percentile=response_percentile,
     )
 
 
@@ -384,6 +404,8 @@ def generate(
         common = {"magicc_dir": magicc_dir}
         if cid_cfg["n_runs"] is not None:
             common["n_runs"] = cid_cfg["n_runs"]
+        if cid_cfg["response_percentile"] is not None:
+            common["response_percentile"] = cid_cfg["response_percentile"]
 
         buildings = {
             **common,

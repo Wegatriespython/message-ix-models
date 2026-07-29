@@ -47,7 +47,7 @@ def predict_water_rime(
     variable: str,
     temporal_res: str = "annual",
     hydro_model: str = "CWatM",
-    percentile: str | None = None,
+    percentile: int | str | None = None,
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Predict water variable at MESSAGE basin resolution (217 rows).
 
@@ -92,10 +92,12 @@ def predict_water_rime(
         return split_basin_macroregion(raw, basin_mapping, basin_id_to_rime_idx)
 
     if temporal_res == "seasonal2step":
-        sfx = f"_{percentile}" if percentile else ""
-        raw_dry = predict_rime(gmt_clipped, filename, f"{variable}_dry{sfx}")
-        raw_wet = predict_rime(gmt_clipped, filename, f"{variable}_wet{sfx}")
+        raw_dry = predict_rime(
+            gmt_clipped, filename, f"{variable}_dry", percentile=percentile
+        )
+        raw_wet = predict_rime(
+            gmt_clipped, filename, f"{variable}_wet", percentile=percentile
+        )
         return (_expand(raw_dry), _expand(raw_wet))
 
-    var_name = variable if not percentile else f"{variable}_{percentile}"
-    return _expand(predict_rime(gmt_clipped, filename, var_name))
+    return _expand(predict_rime(gmt_clipped, filename, variable, percentile=percentile))

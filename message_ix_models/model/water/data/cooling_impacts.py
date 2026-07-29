@@ -89,6 +89,8 @@ def _freshwater_reference_shares() -> pd.Series:
 def predict_cooling_cf(
     gmt_array: np.ndarray,
     cooling: str = "wet",
+    *,
+    percentile: int | str | None = None,
 ) -> pd.DataFrame:
     """Predict regional capacity factors from GMT, mean-reduced.
 
@@ -99,6 +101,9 @@ def predict_cooling_cf(
         ``(n_runs, n_years)`` for ensemble.
     cooling
         ``"wet"`` (freshwater) or ``"dry"`` (air).
+    percentile
+        Conditional response percentile within each RIME GWL window
+        (e.g. ``90``). ``None`` uses the ensemble-mean variable.
 
     Returns
     -------
@@ -110,7 +115,9 @@ def predict_cooling_cf(
     gmt_array = np.asarray(gmt_array)
     gmt_clipped = clip_gmt(gmt_array, gmt_min=0.6, gmt_ceil=0.9)
 
-    raw = predict_rime(gmt_clipped, _DATASET, _VAR, sel=sel, aggregate="mean")
+    raw = predict_rime(
+        gmt_clipped, _DATASET, _VAR, sel=sel, aggregate="mean", percentile=percentile
+    )
     # raw shape: (12, n_years) — regions x time positions
 
     regions = _region_codes()
@@ -122,6 +129,8 @@ def compute_degradation_ratios(
     years: list[int],
     cooling: str = "wet",
     baseline_gwl: float = _DEFAULT_BASELINE_GWL,
+    *,
+    percentile: int | str | None = None,
 ) -> pd.DataFrame:
     """Compute degradation ratios: CF(GMT) / CF(baseline).
 
@@ -135,6 +144,10 @@ def compute_degradation_ratios(
         ``"wet"`` (freshwater) or ``"dry"`` (air).
     baseline_gwl
         Reference warming level (degC). Default 1.0.
+    percentile
+        Conditional response percentile within each RIME GWL window. Applied
+        to both the trajectory and the baseline lookup, so the ratio stays
+        internally consistent.
 
     Returns
     -------
@@ -144,10 +157,15 @@ def compute_degradation_ratios(
         dips below baseline.
     """
     sel = _WET_SEL if cooling == "wet" else _DRY_SEL
-    cf = predict_cooling_cf(gmt_array, cooling=cooling)
+    cf = predict_cooling_cf(gmt_array, cooling=cooling, percentile=percentile)
 
     cf_baseline = predict_rime(
-        np.array([baseline_gwl]), _DATASET, _VAR, sel=sel, aggregate="mean"
+        np.array([baseline_gwl]),
+        _DATASET,
+        _VAR,
+        sel=sel,
+        aggregate="mean",
+        percentile=percentile,
     )[:, 0]  # (12,)
 
     ratios = cf.values / cf_baseline[:, np.newaxis]
@@ -550,6 +568,7 @@ def apply_cooling_cids(
     min_year: int = _DEFAULT_MIN_YEAR,
     commit_message: str | None = None,
     regions: str = "R12",
+    response_percentile: int | str | None = None,
 ) -> None:
     """Apply wet + dry cooling CIDs to *scen* in place.
 
@@ -574,6 +593,9 @@ def apply_cooling_cids(
     regions
         MESSAGE node codelist. Only ``"R12"`` is supported by the shipped
         RIME and freshwater-share data.
+    response_percentile
+        Conditional response percentile within each RIME GWL window (e.g.
+        ``90``). ``None`` uses the ensemble-mean capacity-factor variable.
     """
     if regions != "R12":
         raise NotImplementedError(
@@ -606,6 +628,7 @@ def apply_cooling_cids(
         gmt_model,
         cooling="wet",
         years=matched_years,
+        percentile=response_percentile,
     )
 
     log.info("Computing dry cooling degradation ratios...")
@@ -613,6 +636,7 @@ def apply_cooling_cids(
         gmt_model,
         cooling="dry",
         years=matched_years,
+        percentile=response_percentile,
     )
 
     addon_df = scen.par("addon_conversion")

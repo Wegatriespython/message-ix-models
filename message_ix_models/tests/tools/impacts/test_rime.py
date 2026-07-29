@@ -9,12 +9,14 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+import xarray as xr
 
 from message_ix_models.tools.impacts import (
     check_emulator_linearity,
     clip_gmt,
     impacts_data_path,
     predict_rime,
+    resolve_rime_variable,
 )
 
 # Fake per-run prediction: shape (n_spatial=3,) returned for each GMT scalar.
@@ -108,6 +110,39 @@ def test_predict_linear_single_run_no_raise():
     with _mock_predict_from(), _mock_linearity(0.005):
         result = predict_rime(gmt_2d, "dummy.nc", "qtot_mean")
     assert result.shape == (3, 4)
+
+
+def test_response_percentile_is_selected_inside_each_gwl_window():
+    dataset = xr.Dataset(
+        {
+            "impact": ("gwl", [1.0, 2.0]),
+            "impact_p10": ("gwl", [0.8, 1.6]),
+            "impact_p50": ("gwl", [1.0, 2.0]),
+            "impact_p90": ("gwl", [1.2, 2.4]),
+        },
+        coords={"gwl": [1.0, 2.0]},
+    )
+    with patch(
+        "message_ix_models.tools.impacts.rime.open_rime_dataset",
+        return_value=dataset,
+    ):
+        result = predict_rime(np.array([1.0, 2.0]), "dummy.nc", "impact", percentile=90)
+
+    np.testing.assert_allclose(result, [1.2, 2.4])
+
+
+def test_resolve_response_percentile_reports_available_values():
+    dataset = xr.Dataset(
+        {"impact_p10": ("gwl", [0.8]), "impact_p50": ("gwl", [1.0])},
+        coords={"gwl": [1.0]},
+    )
+    with patch(
+        "message_ix_models.tools.impacts.rime.open_rime_dataset",
+        return_value=dataset,
+    ):
+        assert resolve_rime_variable("dummy.nc", "impact", "p50") == "impact_p50"
+        with pytest.raises(ValueError, match="impact_p90.*impact_p10.*impact_p50"):
+            resolve_rime_variable("dummy.nc", "impact", 90)
 
 
 # Integration tests requiring RIME NetCDF files

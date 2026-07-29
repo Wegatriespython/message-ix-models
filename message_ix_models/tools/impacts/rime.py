@@ -5,10 +5,20 @@ Adapted reimplementation of the prediction core in `iiasa/rime
 `doi:10.1088/2752-5295/adee3d <https://doi.org/10.1088/2752-5295/adee3d>`_
 for the underlying method. Predictions return at native emulator resolution;
 domain modules own any reshape to MESSAGE-compatible arrays.
+
+Response percentiles
+--------------------
+The packaged datasets carry, alongside the ensemble-mean variable, a set of
+``{var_name}_pNN`` siblings — conditional percentiles of the response
+population within each GWL window, not quantiles across GMT. Select one via
+the ``percentile`` argument of :func:`predict_rime`; omit it for the mean.
+``region_EI_{cool,heat}_gwl_binned.nc`` and ``r12_thermoelectric_gwl.nc``
+ship ``_p10``/``_p50``/``_p90``.
 """
 
 import functools
 import logging
+import re
 
 import numpy as np
 import xarray as xr
@@ -27,6 +37,44 @@ log = logging.getLogger(__name__)
 def open_rime_dataset(filename: str) -> xr.Dataset:
     """Cached open of a packaged RIME dataset under ``data/impacts/rime/``."""
     return xr.open_dataset(str(package_data_path("impacts", "rime", filename)))
+
+
+def _percentile_label(percentile: int | str) -> str:
+    """Return the ``pNN`` variable suffix for *percentile*."""
+    value = str(percentile).lower().removeprefix("p")
+    if not value.isdigit():
+        raise ValueError(f"percentile must be an integer or 'pNN', got {percentile!r}")
+    number = int(value)
+    if not 0 <= number <= 100:
+        raise ValueError(f"percentile must lie in [0, 100], got {number}")
+    return f"p{number:02d}"
+
+
+def resolve_rime_variable(
+    filename: str,
+    var_name: str,
+    percentile: int | str | None = None,
+) -> str:
+    """Resolve a response percentile to a variable in a RIME dataset."""
+    if percentile is None:
+        return var_name
+    if re.search(r"_p\d+$", var_name):
+        raise ValueError(
+            f"var_name={var_name!r} already identifies a percentile; omit percentile"
+        )
+    resolved = f"{var_name}_{_percentile_label(percentile)}"
+    dataset = open_rime_dataset(filename)
+    if resolved not in dataset:
+        available = sorted(
+            str(name)
+            for name in dataset.data_vars
+            if str(name).startswith(f"{var_name}_p")
+        )
+        raise ValueError(
+            f"{resolved!r} is not in {filename!r}; available response "
+            f"percentiles: {available or 'none'}"
+        )
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -82,9 +130,11 @@ def _predict_from_gmt(
     filename: str,
     var_name: str,
     sel: dict | None = None,
+    percentile: int | str | None = None,
 ) -> np.ndarray:
     """GWL-binned nearest-neighbor lookup for a scalar GMT value."""
-    data = open_rime_dataset(filename)[var_name]
+    resolved = resolve_rime_variable(filename, var_name, percentile)
+    data = open_rime_dataset(filename)[resolved]
 
     if sel is not None:
         for dim, value in sel.items():
@@ -100,6 +150,7 @@ def predict_rime(
     var_name: str,
     sel: dict | None = None,
     aggregate: str = "mean",
+    percentile: int | str | None = None,
 ) -> np.ndarray:
     """Predict RIME variable from GMT array.
 
@@ -122,7 +173,9 @@ def predict_rime(
         Variable name within the dataset (e.g. ``"qtot_mean"``,
         ``"capacity_factor"``, ``"EI_cool"``).
     sel
-        Optional dimension selections applied before GWL lookup.
+        Optional dimension selections applied before GWL lookup, e.g.
+        ``{"cooling": "wet", "region": "NAM"}``. Keys not present in the
+        variable's dimensions are ignored.
     aggregate
         How to reduce the ensemble axis for 2D input:
 
@@ -134,6 +187,10 @@ def predict_rime(
             Use this when downstream callers need per-run data.
 
         Ignored for 1D input.
+    percentile
+        Conditional response percentile stored in the RIME dataset, for
+        example ``10``, ``50``, ``90``, or ``"p50"``. This selects
+        ``{var_name}_pNN``; it does not take a percentile of *gmt_array*.
 
     Returns
     -------
@@ -154,14 +211,20 @@ def predict_rime(
 
     if gmt_array.ndim == 1:
         preds = [
-            _predict_from_gmt(float(g), filename, var_name, sel=sel) for g in gmt_array
+            _predict_from_gmt(
+                float(g), filename, var_name, sel=sel, percentile=percentile
+            )
+            for g in gmt_array
         ]
         return np.stack(preds, axis=-1)
 
     if gmt_array.ndim == 2:
         n_runs = gmt_array.shape[0]
         lin = check_emulator_linearity(
-            filename, var_name, (float(gmt_array.min()), float(gmt_array.max()))
+            filename,
+            var_name,
+            (float(gmt_array.min()), float(gmt_array.max())),
+            percentile=percentile,
         )
         if lin["max_deviation"] > 0.01:
             if n_runs == 1:
@@ -180,7 +243,13 @@ def predict_rime(
         run_results = []
         for i in range(n_runs):
             preds = [
-                _predict_from_gmt(float(g), filename, var_name, sel=sel)
+                _predict_from_gmt(
+                    float(g),
+                    filename,
+                    var_name,
+                    sel=sel,
+                    percentile=percentile,
+                )
                 for g in gmt_array[i]
             ]
             run_results.append(np.stack(preds, axis=-1))
@@ -198,6 +267,7 @@ def check_emulator_linearity(
     var_name: str,
     gmt_range: tuple[float, float],
     n_probe: int = 20,
+    percentile: int | str | None = None,
 ) -> dict:
     """Probe emulator response linearity over a GMT range.
 
@@ -217,6 +287,8 @@ def check_emulator_linearity(
         ``(gmt_low, gmt_high)`` range to probe.
     n_probe
         Number of GMT values to sample.
+    percentile
+        Conditional response percentile, as for :func:`predict_rime`.
 
     Returns
     -------
@@ -228,9 +300,12 @@ def check_emulator_linearity(
     gmt_probes = np.linspace(gmt_low, gmt_high, n_probe)
     gmt_mean = float(np.mean(gmt_probes))
 
-    results = [_predict_from_gmt(float(g), filename, var_name) for g in gmt_probes]
+    results = [
+        _predict_from_gmt(float(g), filename, var_name, percentile=percentile)
+        for g in gmt_probes
+    ]
     e_of_f = np.nanmean(np.stack(results, axis=0), axis=0)  # E[f(GMT)]
-    f_of_e = _predict_from_gmt(gmt_mean, filename, var_name)
+    f_of_e = _predict_from_gmt(gmt_mean, filename, var_name, percentile=percentile)
 
     with np.errstate(divide="ignore", invalid="ignore"):
         rel_dev = np.abs(e_of_f - f_of_e) / np.abs(f_of_e)

@@ -28,6 +28,14 @@ def test_warming_decreases_heating_ei():
     assert mean_per_year[2] < mean_per_year[0]
 
 
+def test_building_ei_selects_gwl_window_response_percentile():
+    gmt = np.array([1.5, 2.0])
+    low = predict_building_ei(gmt, "cool", percentile=10)
+    high = predict_building_ei(gmt, "cool", percentile=90)
+
+    assert np.nanmean(high) > np.nanmean(low)
+
+
 # ---------------------------------------------------------------------------
 # IAMC packaging helpers
 # ---------------------------------------------------------------------------

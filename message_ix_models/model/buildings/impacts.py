@@ -90,6 +90,8 @@ def load_theta(
 def predict_building_ei(
     gmt_array: np.ndarray,
     mode: Literal["cool", "heat"],
+    *,
+    percentile: int | str | None = None,
 ) -> np.ndarray:
     """Predict EI at native RIME resolution, mean-reduced across the ensemble.
 
@@ -100,6 +102,8 @@ def predict_building_ei(
         trajectory.
     mode
         ``"cool"`` or ``"heat"``.
+    percentile
+        Conditional response percentile within each RIME GWL window.
 
     Returns
     -------
@@ -108,7 +112,11 @@ def predict_building_ei(
     """
     gmt_clipped = clip_gmt(gmt_array, gmt_min=0.6, gmt_ceil=0.9)
     return predict_rime(
-        gmt_clipped, f"region_EI_{mode}_gwl_binned.nc", f"EI_{mode}", aggregate="mean"
+        gmt_clipped,
+        f"region_EI_{mode}_gwl_binned.nc",
+        f"EI_{mode}",
+        aggregate="mean",
+        percentile=percentile,
     )
 
 
@@ -251,6 +259,7 @@ def compute_building_cids(
     model_years: list[int],
     reference_scenario: str,
     regions: str = "R12",
+    response_percentile: int | str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute building energy CIDs from a GMT ensemble.
 
@@ -269,6 +278,8 @@ def compute_building_cids(
     regions
         MESSAGE node codelist. Only ``"R12"`` is supported by the shipped
         RIME EI datasets and STURM floor-area files.
+    response_percentile
+        Conditional response percentile within each RIME GWL window.
 
     Returns
     -------
@@ -309,7 +320,7 @@ def compute_building_cids(
 
     results = {}
     for mode in ("cool", "heat"):
-        ei_all = predict_building_ei(gmt_subset, mode)
+        ei_all = predict_building_ei(gmt_subset, mode, percentile=response_percentile)
         ds = _load_ei_dataset(mode)
         ei_df = _ei_to_dataframe(ei_all, ds, msg_years)
         mfh_ei_df = _mfh_weighted_ei(ei_df, resid_floor)
