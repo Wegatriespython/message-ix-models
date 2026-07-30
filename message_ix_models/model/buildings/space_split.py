@@ -437,6 +437,93 @@ def apply_space_demand_split(
     return record
 
 
+def apply_space_cids(
+    scen: Scenario,
+    cooling_demand: pd.DataFrame,
+    heating_demand: pd.DataFrame,
+    *,
+    commit_message: str | None = None,
+) -> dict[str, Any]:
+    """Write the RIME building CIDs onto the carved space demands, in place.
+
+    The split leaves ``space_cooling``/``space_heating`` carrying the
+    STURM-calibrated baseline share ``f * D``. This replaces those values
+    with the absolute RIME-driven service level from
+    :func:`.buildings.impacts.compute_building_cids` — the same substitution
+    the pre-split kernel made inside ``rc_spec``/``rc_therm``, now landing on
+    commodities outside ``mapping_macro_sector`` so MACRO never trades the
+    climate increment away. The ``rc_*`` residual is not touched.
+
+    Every existing carved-demand row must receive a CID value: a partially
+    covered rewrite would silently mix baseline and impact years.
+
+    Also persists the CID levels as ``Final Energy|Residential and
+    Commercial|{Cooling,Heating}`` timeseries in EJ/yr, matching the
+    pre-split kernel. Does **not** set the scenario as default.
+    """
+    from message_ix_models.model.buildings.impacts import _demand_to_final_energy_iamc
+
+    cids = {"space_cooling": cooling_demand, "space_heating": heating_demand}
+    demand = scen.par("demand")
+    replacement: list[pd.DataFrame] = []
+    record: dict[str, Any] = {}
+
+    for child, cid in cids.items():
+        rows = demand[demand["commodity"] == child]
+        if rows.empty:
+            raise ValueError(f"No {child} rows in demand — split not applied?")
+        merged = rows.merge(
+            cid[["node", "year", "value"]].rename(columns={"value": "_cid"}),
+            on=["node", "year"],
+            how="left",
+        )
+        if merged["_cid"].isna().any():
+            gaps = merged.loc[merged["_cid"].isna(), ["node", "year"]]
+            raise ValueError(
+                f"CID does not cover every {child} demand row: "
+                f"{gaps.to_dict('records')}"
+            )
+        replacement.append(
+            merged.assign(value=lambda df: df["_cid"])[list(rows.columns)]
+        )
+        record[child] = {
+            "rows": int(len(rows)),
+            "baseline_total_GWa": float(rows["value"].sum()),
+            "cid_total_GWa": float(merged["_cid"].sum()),
+        }
+
+    with scen.transact(commit_message or "Write building CIDs to space demands"):
+        for child in cids:
+            scen.remove_par("demand", demand[demand["commodity"] == child])
+        scen.add_par("demand", pd.concat(replacement, ignore_index=True))
+
+    ts = pd.concat(
+        [
+            _demand_to_final_energy_iamc(
+                cooling_demand, "Final Energy|Residential and Commercial|Cooling"
+            ),
+            _demand_to_final_energy_iamc(
+                heating_demand, "Final Energy|Residential and Commercial|Heating"
+            ),
+        ],
+        ignore_index=True,
+    )
+    if not ts.empty:
+        scen.check_out(timeseries_only=True)
+        try:
+            scen.add_timeseries(ts)
+            scen.commit(
+                "Persist buildings CID demand "
+                "(Final Energy|Residential and Commercial|{Cooling,Heating})"
+            )
+        except BaseException:
+            scen.discard_changes()
+            raise
+
+    log.info("Space CIDs applied: %s", record)
+    return record
+
+
 def verify_space_split(
     scen: Scenario,
     *,
