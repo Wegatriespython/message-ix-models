@@ -44,6 +44,16 @@ Nothing here touches the ``sector`` set, ``mapping_macro_sector``,
 ``prfconst``, ``demand_MESSAGE``, ``price_MESSAGE``, ``grow`` or any other
 MACRO calibration parameter. ``grow`` in particular carries the GDP damages
 of the ``_GDP_CI_*`` starters and must survive untouched.
+
+Reporting: activity-derived tables are complete without any special
+handling — the bridge draws the parent commodity 1:1, so the upstream chain
+still produces the full parent demand and every fuel-side final-energy row
+includes the space component (the bridge is also free, so the useful-level
+price of the carved commodity equals the parent's). Tables keyed on the
+``demand`` parameter or ``DEMAND`` variable per commodity (e.g. the legacy
+useful-energy tables, inactive in the shipping configs) see only the
+non-space residual on ``rc_spec``/``rc_therm``; if such a table is ever
+activated, aggregate ``space_*`` into its parent there.
 """
 
 import logging
