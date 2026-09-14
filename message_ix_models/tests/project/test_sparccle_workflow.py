@@ -1,9 +1,17 @@
 """Unit tests for :mod:`message_ix_models.project.sparccle.workflow`."""
 
+from pathlib import Path
+
 import pytest
 
-from message_ix_models.project.sparccle.workflow import _resolve_magicc_dir
-
+from message_ix_models.project.sparccle import workflow
+from message_ix_models.project.sparccle.workflow import (
+    MAX_SCENARIO_NAME,
+    _resolve_magicc_dir,
+    load_config,
+    name_token,
+    validate_names,
+)
 
 STARTER = {
     "model": "SSP_SSP3_v6.6_sp",
@@ -104,3 +112,93 @@ class TestResolveMagiccDir:
                 magicc_model_suffix="",
                 n_starters=1,
             )
+
+
+class TestNameToken:
+    """The token that keeps two response arms from sharing one scenario name."""
+
+    def test_absent_label_leaves_names_unchanged(self):
+        # A config that does not opt in must keep producing the names it always
+        # has, so no already-delivered row moves.
+        assert name_token({"climate_label": None, "response_percentile": None}) == ""
+        assert name_token({"climate_label": None, "response_percentile": 90}) == ""
+
+    def test_mean_response_reads_as_E(self):
+        token = name_token({"climate_label": "c95", "response_percentile": None})
+        assert token == "_c95_iE"
+
+    def test_percentile_response_carries_its_number(self):
+        token = name_token({"climate_label": "c95", "response_percentile": 90})
+        assert token == "_c95_i90"
+
+    def test_two_arms_of_one_starter_get_different_names(self):
+        # The defect this exists to prevent: the same starter built at two
+        # response percentiles wrote one name, and whichever ran last won.
+        starter = "INDC2030i_600f_GDP_CI_95_ensemble_1_PHY_cooling_CI_bp"
+        expectation = starter + name_token(
+            {"climate_label": "c95", "response_percentile": None}
+        )
+        tail = starter + name_token(
+            {"climate_label": "c95", "response_percentile": 90}
+        )
+        assert expectation != tail
+
+    @pytest.mark.parametrize(
+        "filename, expected",
+        [
+            ("scenario_config.yaml", ""),
+            ("scenario_config_p95.yaml", "_c95_iE"),
+            ("scenario_config_sts1_p95.yaml", "_c95_i90"),
+        ],
+    )
+    def test_packaged_configs(self, filename, expected):
+        path = Path(workflow.__file__).parent / filename
+        assert name_token(load_config(path)["cid"]) == expected
+
+
+PACKAGED_CONFIGS = [
+    "scenario_config.yaml",
+    "scenario_config_p95.yaml",
+    "scenario_config_sts1_p95.yaml",
+]
+
+
+class TestValidateNames:
+    """Names too long for the database must fail before anything is cloned."""
+
+    @staticmethod
+    def _config(scenario):
+        return {"starters": [{"scenario": scenario}]}
+
+    def test_name_within_the_limit_passes(self):
+        # 39 characters plus the longest suffix and a 11-character token is the
+        # widest thing the shipping p95 configs ask for.
+        validate_names(
+            self._config("INDC2030i_600f_GDP_CI_95_ensemble_1_PHY"), "_" + "x" * 10
+        )
+
+    def test_over_long_name_names_itself_and_its_length(self):
+        with pytest.raises(ValueError) as exc:
+            validate_names(
+                self._config("INDC2030i_600f_GDP_CI_95_ensemble_1_PHY"),
+                "_climp95_imp90",
+            )
+        message = str(exc.value)
+        over_long = (
+            "INDC2030i_600f_GDP_CI_95_ensemble_1_PHY_cooling_CI_bp_climp95_imp90"
+        )
+        assert over_long in message
+        assert "67 characters" in message
+        assert str(MAX_SCENARIO_NAME) in message
+
+    def test_every_suffix_is_checked(self):
+        # A token long enough that only the shortest suffix survives: the
+        # buildings-only name must still be reported.
+        with pytest.raises(ValueError) as exc:
+            validate_names(self._config("x" * 55), "_" + "y" * 5)
+        assert "_CI_b" in str(exc.value)
+
+    @pytest.mark.parametrize("filename", PACKAGED_CONFIGS)
+    def test_packaged_configs_fit(self, filename):
+        config = load_config(Path(workflow.__file__).parent / filename)
+        validate_names(config, name_token(config["cid"]))

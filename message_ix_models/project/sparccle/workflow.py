@@ -55,10 +55,68 @@ def load_config(path: str | Path) -> dict:
         "n_runs": None,
         "min_year": None,
         "response_percentile": None,
+        "climate_label": None,
         **raw.get("cid", {}),
     }
     config["regions"] = raw.get("regions", "R12")
     return config
+
+
+def name_token(cid_cfg: dict) -> str:
+    """Suffix recording which climate and response percentiles a build used.
+
+    Empty unless the config declares ``cid.climate_label``, so a config that
+    does not opt in produces the same target names it always has. When it does,
+    the token names both axes: the label for the MAGICC input, and the RIME
+    response percentile — ``iE`` for the ensemble mean, ``i90`` for the p90
+    conditional response — which otherwise reaches only the commit message and
+    leaves two different constructions sharing one scenario name.
+
+    Both halves are abbreviated hard because the whole token has to fit in
+    what :data:`MAX_SCENARIO_NAME` leaves after the starter name and the
+    ``_cooling_CI_bp`` suffix.
+    """
+    label = cid_cfg.get("climate_label")
+    if not label:
+        return ""
+    percentile = cid_cfg["response_percentile"]
+    return f"_{label}_i{'E' if percentile is None else percentile}"
+
+
+#: Width of ``SCENARIO.NAME`` in the ixmp JDBC schema before migration V1.31
+#: widens it to 1000. ``ixmp_dev`` is still at the narrow width (confirmed
+#: 2026-09-14 against its Oracle catalogue), and the backend only refuses an
+#: over-long name when the clone is written.
+MAX_SCENARIO_NAME = 64
+
+
+def validate_names(config: dict, token: str) -> None:
+    """Fail fast if any name the graph will write is too long for the database.
+
+    Every CI step clones before its action runs, so a name the backend
+    refuses surfaces as a write failure partway through the graph with the
+    earlier clones already made. Collect every over-long target and raise
+    once.
+    """
+    suffixes = (
+        "_cooling",
+        f"_CI_b{token}",
+        f"_cooling_CI_p{token}",
+        f"_cooling_CI_bp{token}",
+    )
+    too_long = sorted(
+        {
+            f"{name} ({len(name)} characters)"
+            for starter in config["starters"]
+            for name in (starter["scenario"] + suffix for suffix in suffixes)
+            if len(name) > MAX_SCENARIO_NAME
+        }
+    )
+    if too_long:
+        raise ValueError(
+            "SPARCCLE preflight: target scenario names exceed the database "
+            f"limit of {MAX_SCENARIO_NAME} characters:\n  - " + "\n  - ".join(too_long)
+        )
 
 
 def _resolve_magicc_dir(
@@ -370,6 +428,8 @@ def generate(
     context.model.regions = regions
     cooling_cfg = config["cooling"]
     cid_cfg = config["cid"]
+    token = name_token(cid_cfg)
+    validate_names(config, token)
 
     targets: list[str] = []
     for starter in config["starters"]:
@@ -420,7 +480,7 @@ def generate(
                 f"{label} CI_b",
                 base_step,
                 apply_buildings,
-                target=f"ixmp://{platform}/{model}/{scenario}_CI_b",
+                target=f"ixmp://{platform}/{model}/{scenario}_CI_b{token}",
                 clone=True,
                 **buildings,
             )
@@ -430,7 +490,7 @@ def generate(
                 f"{label} CI_p",
                 cooling_step,
                 apply_cooling,
-                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_p",
+                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_p{token}",
                 clone=True,
                 **cooling,
             )
@@ -440,7 +500,7 @@ def generate(
                 f"{label} CI_bp",
                 cooling_step,
                 _apply_buildings_and_cooling,
-                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_bp",
+                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_bp{token}",
                 clone=True,
                 **buildings,
                 **(

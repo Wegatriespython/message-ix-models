@@ -68,3 +68,6 @@ cid:
   n_runs: null
   # Earliest model year touched by cooling CID constraints and dry-cooling derating.
   min_year: 2045
+  # Recorded in the target scenario names, so a build whose response
+  # percentile differs cannot overwrite one whose does not.
+  climate_label: c95
