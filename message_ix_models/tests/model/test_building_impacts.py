@@ -125,3 +125,65 @@ def test_prepare_building_demand_missing_cid_zerofills():
     np.testing.assert_allclose(new_spec["value"].values, [70.0])
     # rc_therm: 200 * (1 - 0.4) + 0 = 120.0
     np.testing.assert_allclose(new_therm["value"].values, [120.0])
+
+
+# ---------------------------------------------------------------------------
+# Scenario data directory
+# ---------------------------------------------------------------------------
+
+
+def _gmt():
+    from message_ix_models.tools.impacts import GmtArray
+
+    years = np.arange(2020, 2101, 5)
+    return GmtArray(np.linspace(1.1, 2.6, len(years)), years)
+
+
+def test_scenario_data_rejects_unknown_files(tmp_path):
+    import pytest
+
+    from message_ix_models.model.buildings.impacts import check_scenario_data
+
+    with pytest.raises(FileNotFoundError):
+        check_scenario_data(tmp_path / "absent")
+    with pytest.raises(ValueError, match="no data files"):
+        check_scenario_data(tmp_path)
+    (tmp_path / "region_EI_cool_gwl_binned_passive.nc").write_text("")
+    with pytest.raises(ValueError, match="Unexpected files"):
+        check_scenario_data(tmp_path)
+
+
+def test_scenario_data_replaces_only_what_it_holds(tmp_path):
+    """Packaged copies reproduce the default; a scaled gamma table scales its part."""
+    import shutil
+
+    from message_ix_models.model.buildings.impacts import (
+        _buildings_data_path,
+        compute_building_cids,
+    )
+    from message_ix_models.util import package_data_path
+
+    years = [2030, 2050, 2100]
+    cool0, heat0 = compute_building_cids(_gmt(), years, "SSP2")
+
+    same = tmp_path / "same"
+    same.mkdir()
+    shutil.copy(
+        package_data_path("impacts", "rime", "region_EI_cool_gwl_binned.nc"), same
+    )
+    name = "correction_coefficients_cool_SSP2_resid.csv"
+    shutil.copy(_buildings_data_path("correction_coefficients", name), same)
+    cool1, heat1 = compute_building_cids(_gmt(), years, "SSP2", data_dir=same)
+    pd.testing.assert_frame_equal(cool0, cool1)
+    pd.testing.assert_frame_equal(heat0, heat1)
+
+    double = tmp_path / "double"
+    double.mkdir()
+    cc = pd.read_csv(_buildings_data_path("correction_coefficients", name), comment="#")
+    cc["correction_coeff"] *= 2
+    cc.to_csv(double / name, index=False)
+    cool2, heat2 = compute_building_cids(_gmt(), years, "SSP2", data_dir=double)
+    pd.testing.assert_frame_equal(heat0, heat2)
+    ratio = (cool2["value"] / cool0["value"]).dropna()
+    # Residential doubles, commercial does not: every node rises, none doubles past 2x.
+    assert (ratio > 1).all() and (ratio <= 2 + 1e-9).all()

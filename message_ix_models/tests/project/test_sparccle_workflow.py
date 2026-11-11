@@ -29,9 +29,7 @@ class TestResolveMagiccDir:
             magicc_model_suffix="",
             n_starters=2,
         )
-        assert result == (
-            "/data/magicc/SSP_SSP3_v6.6_sp/NPiREF_GDP_CI_95_ensemble_2"
-        )
+        assert result == ("/data/magicc/SSP_SSP3_v6.6_sp/NPiREF_GDP_CI_95_ensemble_2")
 
     def test_model_suffix_appends_to_model_component(self):
         result = _resolve_magicc_dir(
@@ -138,9 +136,7 @@ class TestNameToken:
         expectation = starter + name_token(
             {"climate_label": "c95", "response_percentile": None}
         )
-        tail = starter + name_token(
-            {"climate_label": "c95", "response_percentile": 90}
-        )
+        tail = starter + name_token({"climate_label": "c95", "response_percentile": 90})
         assert expectation != tail
 
     @pytest.mark.parametrize(
@@ -202,3 +198,27 @@ class TestValidateNames:
     def test_packaged_configs_fit(self, filename):
         config = load_config(Path(workflow.__file__).parent / filename)
         validate_names(config, name_token(config["cid"]))
+
+
+class TestBuildingsToken:
+    """Buildings scenario data must change the buildings names, and only those."""
+
+    def test_absent_data_leaves_names_unchanged(self):
+        assert workflow.buildings_token({"buildings_data": None}) == ""
+
+    def test_label_names_the_data(self):
+        cfg = {"buildings_data": "/some/dir", "buildings_label": "PAS"}
+        assert workflow.buildings_token(cfg) == "_bPAS"
+
+    def test_data_without_label_is_refused(self):
+        with pytest.raises(ValueError, match="buildings_label"):
+            workflow.buildings_token({"buildings_data": "/some/dir"})
+
+    def test_cooling_only_name_is_not_checked_against_the_buildings_label(self):
+        # 52 + "_cooling_CI_p" fits; with the label only the CI_b/CI_bp names
+        # grow, so only those can be reported.
+        config = {"starters": [{"scenario": "x" * 46}]}
+        with pytest.raises(ValueError) as exc:
+            validate_names(config, "", "_bPOSA")
+        assert "_cooling_CI_bp_bPOSA" in str(exc.value)
+        assert "_cooling_CI_p " not in str(exc.value)

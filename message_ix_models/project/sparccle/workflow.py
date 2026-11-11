@@ -56,6 +56,8 @@ def load_config(path: str | Path) -> dict:
         "min_year": None,
         "response_percentile": None,
         "climate_label": None,
+        "buildings_data": None,
+        "buildings_label": None,
         **raw.get("cid", {}),
     }
     config["regions"] = raw.get("regions", "R12")
@@ -83,6 +85,21 @@ def name_token(cid_cfg: dict) -> str:
     return f"_{label}_i{'E' if percentile is None else percentile}"
 
 
+def buildings_token(cid_cfg: dict) -> str:
+    """Suffix naming the buildings scenario data, for ``CI_b`` and ``CI_bp`` only.
+
+    Empty without ``cid.buildings_data``. With it, ``cid.buildings_label`` is
+    required, so two buildings scenarios on one starter never share a name;
+    ``CI_p`` does not read buildings data and keeps its name.
+    """
+    if not cid_cfg.get("buildings_data"):
+        return ""
+    label = cid_cfg.get("buildings_label")
+    if not label:
+        raise ValueError("cid.buildings_data is set but cid.buildings_label is not")
+    return f"_b{label}"
+
+
 #: Width of ``SCENARIO.NAME`` in the ixmp JDBC schema before migration V1.31
 #: widens it to 1000. ``ixmp_dev`` is still at the narrow width (confirmed
 #: 2026-09-14 against its Oracle catalogue), and the backend only refuses an
@@ -90,7 +107,7 @@ def name_token(cid_cfg: dict) -> str:
 MAX_SCENARIO_NAME = 64
 
 
-def validate_names(config: dict, token: str) -> None:
+def validate_names(config: dict, token: str, btoken: str = "") -> None:
     """Fail fast if any name the graph will write is too long for the database.
 
     Every CI step clones before its action runs, so a name the backend
@@ -100,9 +117,9 @@ def validate_names(config: dict, token: str) -> None:
     """
     suffixes = (
         "_cooling",
-        f"_CI_b{token}",
+        f"_CI_b{token}{btoken}",
         f"_cooling_CI_p{token}",
-        f"_cooling_CI_bp{token}",
+        f"_cooling_CI_bp{token}{btoken}",
     )
     too_long = sorted(
         {
@@ -220,6 +237,13 @@ def validate_inputs(config: dict) -> None:
         + _missing_buildings({s["ssp"] for s in config["starters"]})
         + _missing_rime()
     )
+    if data_dir := config["cid"].get("buildings_data"):
+        from message_ix_models.model.buildings.impacts import check_scenario_data
+
+        try:
+            check_scenario_data(data_dir)
+        except FileNotFoundError:
+            missing.append(f"buildings scenario data: {data_dir}")
     if missing:
         raise FileNotFoundError(
             "SPARCCLE preflight: required inputs not found:\n  - "
@@ -277,11 +301,14 @@ def apply_buildings(
     n_runs: int | None = None,
     reference_scenario: str = "SSP2",
     response_percentile: int | str | None = None,
+    buildings_data: str | Path | None = None,
 ) -> None:
     """Apply building-energy CIDs in place on *scenario* (``CI_b`` step).
 
     *response_percentile* selects a conditional response percentile within each
     RIME GWL window (e.g. ``90``); ``None`` uses the ensemble-mean surface.
+    *buildings_data* is an optional scenario data directory; see
+    :func:`.buildings.impacts.check_scenario_data`.
     """
     from message_ix_models.model.buildings.impacts import (
         apply_building_cids,
@@ -297,13 +324,15 @@ def apply_buildings(
         reference_scenario=reference_scenario,
         regions=context.model.regions,
         response_percentile=response_percentile,
+        data_dir=buildings_data,
     )
     pct = "mean" if response_percentile is None else f"p{response_percentile}"
+    data = "" if buildings_data is None else f", data {buildings_data}"
     apply_building_cids(
         scenario,
         cooling,
         heating,
-        commit_message=f"Building CIDs ({reference_scenario}, {n} runs, {pct})",
+        commit_message=f"Building CIDs ({reference_scenario}, {n} runs, {pct}{data})",
         reference_scenario=reference_scenario,
     )
     persist_gmt_mean(scenario, gmt)
@@ -351,6 +380,7 @@ def _apply_buildings_and_cooling(
     reference_scenario: str = "SSP2",
     min_year: int | None = None,
     response_percentile: int | str | None = None,
+    buildings_data: str | Path | None = None,
 ) -> None:
     """``CI_bp`` composite: buildings then cooling CIDs in place."""
     apply_buildings(
@@ -360,6 +390,7 @@ def _apply_buildings_and_cooling(
         n_runs=n_runs,
         reference_scenario=reference_scenario,
         response_percentile=response_percentile,
+        buildings_data=buildings_data,
     )
     apply_cooling(
         context,
@@ -378,6 +409,8 @@ def generate(
     magicc_root: str | Path | None = None,
     magicc_file: str | Path | None = None,
     magicc_model_suffix: str = "",
+    buildings_data: str | Path | None = None,
+    buildings_label: str | None = None,
     **options,
 ) -> Workflow:
     """Build the SPARCCLE Phase-1 + Phase-2 workflow.
@@ -393,6 +426,10 @@ def generate(
         precedence rules. When neither ``magicc_root`` nor ``magicc_file``
         is given, the per-starter ``magicc_output_dir`` from the YAML is
         used.
+    buildings_data, buildings_label
+        Buildings scenario data directory and the short label it adds to the
+        ``CI_b`` and ``CI_bp`` names; override ``cid.buildings_data`` and
+        ``cid.buildings_label`` in the YAML.
     options
         Reserved for forward-compatibility with extra CLI options;
         currently ignored.
@@ -406,6 +443,10 @@ def generate(
     del options
 
     config = load_config(config_path or _DEFAULT_CONFIG_PATH)
+    if buildings_data is not None:
+        config["cid"]["buildings_data"] = str(buildings_data)
+    if buildings_label is not None:
+        config["cid"]["buildings_label"] = buildings_label
 
     n_starters = len(config["starters"])
     for starter in config["starters"]:
@@ -429,7 +470,8 @@ def generate(
     cooling_cfg = config["cooling"]
     cid_cfg = config["cid"]
     token = name_token(cid_cfg)
-    validate_names(config, token)
+    btoken = buildings_token(cid_cfg)
+    validate_names(config, token, btoken)
 
     targets: list[str] = []
     for starter in config["starters"]:
@@ -471,6 +513,8 @@ def generate(
             **common,
             "reference_scenario": ssp,
         }
+        if cid_cfg["buildings_data"]:
+            buildings["buildings_data"] = cid_cfg["buildings_data"]
         cooling = dict(common)
         if cid_cfg["min_year"] is not None:
             cooling["min_year"] = cid_cfg["min_year"]
@@ -480,7 +524,7 @@ def generate(
                 f"{label} CI_b",
                 base_step,
                 apply_buildings,
-                target=f"ixmp://{platform}/{model}/{scenario}_CI_b{token}",
+                target=f"ixmp://{platform}/{model}/{scenario}_CI_b{token}{btoken}",
                 clone=True,
                 **buildings,
             )
@@ -500,7 +544,7 @@ def generate(
                 f"{label} CI_bp",
                 cooling_step,
                 _apply_buildings_and_cooling,
-                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_bp{token}",
+                target=f"ixmp://{platform}/{model}/{scenario}_cooling_CI_bp{token}{btoken}",
                 clone=True,
                 **buildings,
                 **(
